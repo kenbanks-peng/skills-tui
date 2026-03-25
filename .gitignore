@@ -1,0 +1,17 @@
+# Rust
+/target/
+Cargo.lock
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cache
+skills-cache.json

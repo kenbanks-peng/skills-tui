@@ -1,0 +1,16 @@
+[env]
+a = 1
+b = 2
+
+[tools]
+bun = "latest"
+
+[tasks.install]
+run = "bun install"
+
+[tasks.start]
+run = "bun src/index.tsx"
+
+[tasks.dev]
+run = "bun --watch src/index.tsx"
+
