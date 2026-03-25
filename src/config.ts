@@ -40,7 +40,7 @@ repos = [
   "kepano/obsidian-skills",
   "obra/superpowers",
   "mattpocock/skills",
-  "ooiyeefei/skills",
+  "ooiyeefei/ccc",
   "kenbanks-peng/skills",
   "sickn33/antigravity-awesome-skills",
 ]
