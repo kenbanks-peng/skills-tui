@@ -64,3 +64,15 @@ export function truncateText(text: string, maxLength: number): string {
 	if (text.length <= maxLength) return text;
 	return text.slice(0, maxLength - 3) + "...";
 }
+
+export function stripAnsi(str: string): string {
+	return str.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
+}
+
+export function viewportHeight(
+	termHeight: number,
+	reservedLines: number,
+	minHeight = 3,
+): number {
+	return Math.max(minHeight, termHeight - reservedLines);
+}

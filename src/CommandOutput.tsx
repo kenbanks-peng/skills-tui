@@ -1,6 +1,7 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useState, useEffect, useRef } from "react";
 import { theme } from "./theme";
+import { stripAnsi } from "./utils";
 
 interface CommandOutputProps {
 	args: string[] | null;
@@ -42,7 +43,7 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 
 		// 'c' to copy output to clipboard (when not running)
 		if (key.name === "c" && !isRunning && output) {
-			const cleanOutput = output.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
+			const cleanOutput = stripAnsi(output);
 			const proc = Bun.spawn(["pbcopy"], { stdin: "pipe" });
 			proc.stdin.write(cleanOutput);
 			proc.stdin.end();
@@ -127,8 +128,6 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 		};
 	}, [args]);
 
-	// Strip ANSI codes from output for display
-	const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
 	const cleanOutput = stripAnsi(output);
 
 	return (

@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useState, useEffect } from "react";
-import { theme } from "../theme";
+import { theme, CHECK_MARK } from "../theme";
 import {
 	loadInstalledSkills,
 	loadSkillsFromRepo,
@@ -10,9 +10,15 @@ import {
 	installLocalSkill,
 	removeLocalSkill,
 } from "../skills";
-import { truncateText, isFileRepo, repoDisplayName } from "../utils";
+import {
+	truncateText,
+	isFileRepo,
+	repoDisplayName,
+	viewportHeight,
+} from "../utils";
 import { addSkill, removeSkill } from "../skills-cli";
 import type { AgentConfig, RepoSource } from "../config";
+import { useScrollableList } from "../useScrollableList";
 
 interface ViewByRepoProps {
 	focusedColumn: "repos" | "skills" | null;
@@ -41,8 +47,6 @@ export function ViewByRepo({
 	const [selectedRepo, setSelectedRepo] = useState<RepoSource | null>(null);
 	const [availableSkills, setAvailableSkills] = useState<string[]>([]);
 	const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
-	const [selectedSkillIndex, setSelectedSkillIndex] = useState(0);
-	const [skillScrollOffset, setSkillScrollOffset] = useState(0);
 	const [loadingSkills, setLoadingSkills] = useState(false);
 	const [allRepoSkills, setAllRepoSkills] = useState<Map<string, string[]>>(
 		new Map(),
@@ -75,6 +79,28 @@ export function ViewByRepo({
 			})
 		: repos;
 
+	// Filter skills within selected repo
+	const filteredSkills = searchFilter
+		? availableSkills.filter((s) => s.toLowerCase().includes(lowerFilter))
+		: availableSkills;
+
+	const showSkills = availableSkills.length > 0;
+	const repoSelectHeight = viewportHeight(height, 15, 5);
+	const repoOptions = filteredRepos.map((repo) => ({
+		name: repoDisplayName(repo),
+	}));
+
+	// Skills scrollable list
+	const totalVH = viewportHeight(height, 15, 5);
+	const skillsList = useScrollableList(
+		filteredSkills.length,
+		Math.max(1, totalVH - 2),
+	);
+
+	const hasPrevious = skillsList.scrollOffset > 0;
+	const indicatorLines = (hasPrevious ? 1 : 0) + 1;
+	const adjustedVH = totalVH - indicatorLines;
+
 	// Auto-select first repo
 	useEffect(() => {
 		if (
@@ -91,8 +117,7 @@ export function ViewByRepo({
 			setLoadingSkills(true);
 			setAvailableSkills([]);
 			setSelectedSkills(new Set());
-			setSelectedSkillIndex(0);
-			setSkillScrollOffset(0);
+			skillsList.reset();
 			if (isFileRepo(selectedRepo)) {
 				const skills = listLocalSkills(selectedRepo);
 				const installed = getInstalledLocalSkills(selectedRepo, isGlobal);
@@ -136,23 +161,6 @@ export function ViewByRepo({
 			});
 	};
 
-	// Filter skills within selected repo
-	const filteredSkills = searchFilter
-		? availableSkills.filter((s) => s.toLowerCase().includes(lowerFilter))
-		: availableSkills;
-
-	const showSkills = availableSkills.length > 0;
-	const repoSelectHeight = Math.max(5, height - 15);
-	const repoOptions = filteredRepos.map((repo) => ({
-		name: repoDisplayName(repo),
-	}));
-
-	// Skills keyboard handling
-	const totalViewportHeight = Math.max(5, height - 15);
-	const hasPrevious = skillScrollOffset > 0;
-	const indicatorLines = (hasPrevious ? 1 : 0) + 1;
-	const adjustedViewportHeight = totalViewportHeight - indicatorLines;
-
 	useKeyboard((key) => {
 		// Repos: enter to navigate to skills or install whole repo
 		if (key.name === "enter" && focusedColumn === "repos" && selectedRepo) {
@@ -166,57 +174,15 @@ export function ViewByRepo({
 
 		// Skills keyboard
 		if (focusedColumn !== "skills") return;
-		if (key.name === "up") {
-			const newIndex = Math.max(0, selectedSkillIndex - 1);
-			if (newIndex < skillScrollOffset) setSkillScrollOffset(newIndex);
-			setSelectedSkillIndex(newIndex);
+
+		// Navigation keys
+		if (skillsList.handlers[key.name]) {
+			skillsList.handlers[key.name]();
 			return;
 		}
-		if (key.name === "down") {
-			const newIndex = Math.min(
-				filteredSkills.length - 1,
-				selectedSkillIndex + 1,
-			);
-			if (newIndex >= skillScrollOffset + adjustedViewportHeight) {
-				setSkillScrollOffset(newIndex - adjustedViewportHeight + 1);
-			}
-			setSelectedSkillIndex(newIndex);
-			return;
-		}
-		if (key.name === "pageup") {
-			const newIndex = Math.max(0, selectedSkillIndex - adjustedViewportHeight);
-			setSkillScrollOffset(Math.max(0, newIndex));
-			setSelectedSkillIndex(newIndex);
-			return;
-		}
-		if (key.name === "pagedown") {
-			const newIndex = Math.min(
-				filteredSkills.length - 1,
-				selectedSkillIndex + adjustedViewportHeight,
-			);
-			const maxOffset = Math.max(
-				0,
-				filteredSkills.length - adjustedViewportHeight,
-			);
-			setSkillScrollOffset(Math.min(maxOffset, newIndex));
-			setSelectedSkillIndex(newIndex);
-			return;
-		}
-		if (key.name === "home") {
-			setSelectedSkillIndex(0);
-			setSkillScrollOffset(0);
-			return;
-		}
-		if (key.name === "end") {
-			const lastIndex = filteredSkills.length - 1;
-			setSelectedSkillIndex(lastIndex);
-			setSkillScrollOffset(
-				Math.max(0, filteredSkills.length - adjustedViewportHeight),
-			);
-			return;
-		}
+
 		if (key.name === "space") {
-			const skill = filteredSkills[selectedSkillIndex];
+			const skill = filteredSkills[skillsList.index];
 			if (skill && selectedRepo) {
 				const isSelected = selectedSkills.has(skill);
 				if (isFileRepo(selectedRepo)) {
@@ -257,16 +223,14 @@ export function ViewByRepo({
 
 	// Reset skill index when filter changes
 	useEffect(() => {
-		setSelectedSkillIndex(0);
-		setSkillScrollOffset(0);
+		skillsList.reset();
 	}, [searchFilter]);
 
 	const visibleSkills = filteredSkills.slice(
-		skillScrollOffset,
-		skillScrollOffset + adjustedViewportHeight,
+		skillsList.scrollOffset,
+		skillsList.scrollOffset + adjustedVH,
 	);
-	const hasMore =
-		skillScrollOffset + adjustedViewportHeight < filteredSkills.length;
+	const hasMore = skillsList.scrollOffset + adjustedVH < filteredSkills.length;
 
 	return (
 		<>
@@ -300,7 +264,7 @@ export function ViewByRepo({
 							if (availableSkills.length > 0) {
 								onFocusSkills();
 							} else if (!isFileRepo(repo)) {
-								runSilently(buildArgs("add", repo));
+								runAction("add", repo);
 							}
 						}}
 					/>
@@ -333,7 +297,7 @@ export function ViewByRepo({
 							{hasPrevious && (
 								<box paddingLeft={1} marginBottom={1}>
 									<text fg={theme.overlay1}>
-										{"\u2191"} {skillScrollOffset} more above
+										{"\u2191"} {skillsList.scrollOffset} more above
 									</text>
 								</box>
 							)}
@@ -344,10 +308,10 @@ export function ViewByRepo({
 								flexGrow={1}
 							>
 								{visibleSkills.map((skill, visibleIndex) => {
-									const idx = skillScrollOffset + visibleIndex;
-									const isHighlighted = idx === selectedSkillIndex;
+									const idx = skillsList.scrollOffset + visibleIndex;
+									const isHighlighted = idx === skillsList.index;
 									const isSelected = selectedSkills.has(skill);
-									const checkbox = isSelected ? "[\u2713] " : "[ ] ";
+									const checkbox = isSelected ? `[${CHECK_MARK}] ` : "[ ] ";
 									const displayName = truncateText(skill, 31);
 									return (
 										<box
@@ -381,8 +345,8 @@ export function ViewByRepo({
 									<text fg={theme.overlay1}>
 										{"\u2193"}{" "}
 										{filteredSkills.length -
-											skillScrollOffset -
-											adjustedViewportHeight}{" "}
+											skillsList.scrollOffset -
+											adjustedVH}{" "}
 										more below
 									</text>
 								</box>

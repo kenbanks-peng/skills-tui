@@ -11,7 +11,7 @@ import {
 } from "fs";
 import { cacheDir } from "./config";
 import type { AgentConfig } from "./config";
-import { fileUrlToPath } from "./utils";
+import { fileUrlToPath, stripAnsi } from "./utils";
 import { listSkills, listRepoSkills } from "./skills-cli";
 
 // Installed skill info: skill name -> set of agent names
@@ -70,7 +70,7 @@ export async function parseInstalledSkills(
 		const text = await listSkills(isGlobal, agentNames);
 
 		// Strip ANSI codes
-		const clean = text.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
+		const clean = stripAnsi(text);
 		const lines = clean.split("\n");
 
 		const skills: InstalledSkillInfo[] = [];
