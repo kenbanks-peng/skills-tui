@@ -76,11 +76,11 @@ export function App() {
 
 	const navigateForward = () => {
 		setFocusedColumn((prev) => {
-			if (prev === "services") return showSearch ? "search" : "content";
-			if (prev === "search") return "content";
+			if (prev === "services") return "content";
 			if (prev === "content" && hasContent2) return "content2";
-			if (prev === "content") return "settings";
-			if (prev === "content2") return "settings";
+			if (prev === "content") return showSearch ? "search" : "settings";
+			if (prev === "content2") return showSearch ? "search" : "settings";
+			if (prev === "search") return "settings";
 			if (prev === "settings") return "services";
 			return "services";
 		});
@@ -89,13 +89,11 @@ export function App() {
 	const navigateBackward = () => {
 		setFocusedColumn((prev) => {
 			if (prev === "services") return "settings";
-			if (prev === "settings") {
-				if (hasContent2) return "content2";
-				return "content";
-			}
+			if (prev === "settings")
+				return showSearch ? "search" : hasContent2 ? "content2" : "content";
+			if (prev === "search") return hasContent2 ? "content2" : "content";
 			if (prev === "content2") return "content";
-			if (prev === "content") return showSearch ? "search" : "services";
-			if (prev === "search") return "services";
+			if (prev === "content") return "services";
 			return "services";
 		});
 	};
@@ -272,35 +270,6 @@ export function App() {
 
 				{/* Content area with optional search */}
 				<box flexDirection="column" flexGrow={1}>
-					{showSearch && (
-						<box
-							border
-							borderStyle={focusedColumn === "search" ? "double" : "rounded"}
-							borderColor={
-								focusedColumn === "search" ? theme.lavender : theme.surface2
-							}
-							paddingLeft={1}
-							paddingRight={1}
-							height={3}
-							flexShrink={0}
-							title=" Filter "
-						>
-							<box flexDirection="row">
-								<text fg={theme.overlay1}>{"\u203a "}</text>
-								{searchFilter ? (
-									<text fg={theme.text}>{searchFilter}</text>
-								) : focusedColumn !== "search" ? (
-									<text fg={theme.overlay0}>Type to filter skills...</text>
-								) : null}
-								{focusedColumn === "search" && (
-									<text fg={theme.lavender} attributes={TextAttributes.BOLD}>
-										{"\u258e"}
-									</text>
-								)}
-							</box>
-						</box>
-					)}
-
 					<box flexDirection="row" flexGrow={1} gap={1}>
 						{selectedServiceId === ServiceId.VIEW_BY_SKILL && (
 							<ViewBySkill
@@ -358,6 +327,35 @@ export function App() {
 							/>
 						)}
 					</box>
+
+					{showSearch && (
+						<box
+							border
+							borderStyle={focusedColumn === "search" ? "double" : "rounded"}
+							borderColor={
+								focusedColumn === "search" ? theme.lavender : theme.surface2
+							}
+							paddingLeft={1}
+							paddingRight={1}
+							height={3}
+							flexShrink={0}
+							title=" Filter "
+						>
+							<box flexDirection="row">
+								<text fg={theme.overlay1}>{"\u203a "}</text>
+								{searchFilter ? (
+									<text fg={theme.text}>{searchFilter}</text>
+								) : focusedColumn !== "search" ? (
+									<text fg={theme.overlay0}>Type to filter skills...</text>
+								) : null}
+								{focusedColumn === "search" && (
+									<text fg={theme.lavender} attributes={TextAttributes.BOLD}>
+										{"\u258e"}
+									</text>
+								)}
+							</box>
+						</box>
+					)}
 				</box>
 			</box>
 
@@ -388,32 +386,28 @@ export function App() {
 					</text>
 				</box>
 				<text fg={theme.subtext0}>
-					<span fg={theme.sapphire}>{"\u2190/\u2192"}</span>
-					<span fg={theme.overlay1}> or </span>
-					<span fg={theme.sapphire}>Tab</span>
-					<span fg={theme.overlay1}>: Switch </span>
-					<span fg={theme.sapphire}>{"\u2191/\u2193"}</span>
-					<span fg={theme.overlay1}>: Navigate </span>
+					<span fg={theme.sapphire}>Navigate: </span>
+					<span fg={theme.overlay1}>Tab/Arrows</span>
 					{focusedColumn === "content2" &&
 					selectedServiceId === ServiceId.VIEW_BY_REPO ? (
 						<>
-							<span fg={theme.sapphire}>PgUp/PgDn</span>
-							<span fg={theme.overlay1}>: Jump </span>
-							<span fg={theme.sapphire}>Space</span>
-							<span fg={theme.overlay1}>: Toggle </span>
-							<span fg={theme.sapphire}>Enter</span>
-							<span fg={theme.overlay1}>: Install </span>
+							<span fg={theme.sapphire}>{"   "}Jump: </span>
+							<span fg={theme.overlay1}>PgUp/PgDn</span>
+							<span fg={theme.sapphire}>{"   "}Toggle: </span>
+							<span fg={theme.overlay1}>Space</span>
+							<span fg={theme.sapphire}>{"   "}Install: </span>
+							<span fg={theme.overlay1}>Enter</span>
 						</>
 					) : (
 						<>
-							<span fg={theme.sapphire}>Enter</span>
-							<span fg={theme.overlay1}>: Select </span>
-							<span fg={theme.sapphire}>Space</span>
-							<span fg={theme.overlay1}>: Toggle </span>
+							<span fg={theme.sapphire}>{"   "}Select: </span>
+							<span fg={theme.overlay1}>Enter</span>
+							<span fg={theme.sapphire}>{"   "}Toggle: </span>
+							<span fg={theme.overlay1}>Space</span>
 						</>
 					)}
-					<span fg={theme.sapphire}>Esc</span>
-					<span fg={theme.overlay1}>: Exit</span>
+					<span fg={theme.sapphire}>{"   "}Quit: </span>
+					<span fg={theme.overlay1}>Esc</span>
 				</text>
 			</box>
 		</box>

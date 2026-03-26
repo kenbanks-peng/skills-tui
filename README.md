@@ -53,12 +53,11 @@ global = "~/.my-agent/skills/"
 
 | Key | Action |
 |---|---|
-| `←`/`→` or `Tab` | Switch panels |
-| `↑`/`↓` | Navigate lists |
+| `Tab` `←` `↑` `→` `↓` | Navigate |
 | `Enter` | Select / Install |
 | `Space` | Toggle selection |
 | `g` | Toggle global/local |
-| `Esc` | Exit |
+| `Esc` | Quit |
 
 ## License
 
