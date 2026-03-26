@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core";
-import { theme, CHECK_MARK } from "../theme";
-import { truncateText } from "../utils";
+import { theme, CHECK_MARK } from "../lib/theme";
+import { truncateText } from "../lib/utils";
 
 interface SkillsListProps {
 	focusedColumn: "repos" | "skills" | null;

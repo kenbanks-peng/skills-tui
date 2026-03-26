@@ -1,8 +1,8 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useState } from "react";
-import { theme } from "../theme";
-import { findArgs } from "../skills-cli";
+import { theme } from "../lib/theme";
+import { findArgs } from "../lib/skills-cli";
 import { CommandOutput } from "../components/CommandOutput";
 
 interface FindProps {

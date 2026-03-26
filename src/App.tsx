@@ -5,7 +5,7 @@ import {
 	useTerminalDimensions,
 } from "@opentui/react";
 import { useState, useEffect } from "react";
-import { theme } from "./theme";
+import { theme } from "./lib/theme";
 import { services, ServiceId } from "./services";
 import {
 	loadAgents,
@@ -13,9 +13,9 @@ import {
 	loadUniversalAgents,
 	loadDisabledAgents,
 	saveDisabledAgents,
-} from "./config";
-import type { AgentConfig, UniversalAgents, RepoSource } from "./config";
-import { checkArgs, updateArgs } from "./skills-cli";
+} from "./lib/config";
+import type { AgentConfig, UniversalAgents, RepoSource } from "./lib/config";
+import { checkArgs, updateArgs } from "./lib/skills-cli";
 import { ServicesPanel } from "./components/ServicesPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SearchFilter } from "./components/SearchFilter";

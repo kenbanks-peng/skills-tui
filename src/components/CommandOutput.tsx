@@ -1,7 +1,7 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useState, useEffect, useRef } from "react";
-import { theme } from "../theme";
-import { stripAnsi } from "../utils";
+import { theme } from "../lib/theme";
+import { stripAnsi } from "../lib/utils";
 
 interface CommandOutputProps {
 	args: string[] | null;

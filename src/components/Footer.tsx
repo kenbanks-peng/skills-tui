@@ -1,4 +1,4 @@
-import { theme } from "../theme";
+import { theme } from "../lib/theme";
 import { ServiceId } from "../services";
 
 interface FooterProps {

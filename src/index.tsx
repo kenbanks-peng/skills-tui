@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { ensureDirectories } from "./config";
+import { ensureDirectories } from "./lib/config";
 import { App } from "./App";
 
 ensureDirectories();
