@@ -1,6 +1,6 @@
 # skills-tui
 
-A terminal UI for managing [AI agent skills](https://github.com/anthropics/skills) across 35+ coding agents — Claude Code, Cursor, Copilot, Windsurf, Gemini CLI, and more.
+A terminal UI for managing AI agent skills.
 
 Browse skill repositories, install/remove skills, check for updates, and control which agents receive which skills, all from one place.
 
@@ -16,18 +16,12 @@ Browse skill repositories, install/remove skills, check for updates, and control
 - **Global & local** — toggle between global (`~/.agents/skills/`) and project-local (`.agents/skills/`) installs
 - **Filter** — type-ahead filtering when browsing skills
 
-## Prerequisites
-
-- [Bun](https://bun.sh) (latest)
-- [skills CLI](https://github.com/anthropics/skills) installed and on your `PATH`
-
-If you use [mise](https://mise.jdx.dev), Bun will be set up automatically.
 
 ## Install & Run
 
 ```sh
 # Clone the repo
-git clone https://github.com/anthropics/skills-tui.git
+git clone https://github.com/kenbanks-peng/skills-tui
 cd skills-tui
 
 # Install dependencies
@@ -35,13 +29,6 @@ bun install
 
 # Run
 bun src/index.tsx
-```
-
-Or with mise:
-
-```sh
-mise run install
-mise run start
 ```
 
 ## Configuration

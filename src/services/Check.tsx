@@ -1,25 +1,21 @@
 import { useState } from "react";
 import { CommandOutput } from "../CommandOutput";
-import { ensureOpencode } from "../utils";
+import { checkCmd } from "../skills-cli";
 
 interface CheckProps {
-  focused: boolean;
-  isGlobal: boolean;
-  selectedAgents: Set<string>;
-  onBack: () => void;
+	focused: boolean;
+	isGlobal: boolean;
+	selectedAgents: Set<string>;
+	onBack: () => void;
 }
 
-export function Check({ focused, isGlobal, selectedAgents, onBack }: CheckProps) {
-  const [command] = useState(() => {
-    const globalFlag = isGlobal ? "-g " : "";
-    return `skills check ${globalFlag}--agent ${ensureOpencode(selectedAgents).join(" ")}`.trim();
-  });
+export function Check({
+	focused,
+	isGlobal,
+	selectedAgents,
+	onBack,
+}: CheckProps) {
+	const [command] = useState(() => checkCmd(isGlobal, selectedAgents));
 
-  return (
-    <CommandOutput
-      command={command}
-      focused={focused}
-      onBack={onBack}
-    />
-  );
+	return <CommandOutput command={command} focused={focused} onBack={onBack} />;
 }
