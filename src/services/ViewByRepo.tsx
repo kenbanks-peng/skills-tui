@@ -1,7 +1,6 @@
-import { TextAttributes } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useState, useEffect } from "react";
-import { theme, CHECK_MARK } from "../theme";
+import { theme } from "../theme";
 import {
 	loadInstalledSkills,
 	loadSkillsFromRepo,
@@ -10,15 +9,11 @@ import {
 	installLocalSkill,
 	removeLocalSkill,
 } from "../skills";
-import {
-	truncateText,
-	isFileRepo,
-	repoDisplayName,
-	viewportHeight,
-} from "../utils";
+import { isFileRepo, repoDisplayName, viewportHeight } from "../utils";
 import { addSkill, removeSkill } from "../skills-cli";
 import type { AgentConfig, RepoSource } from "../config";
 import { useScrollableList } from "../useScrollableList";
+import { SkillsList } from "./SkillsList";
 
 interface ViewByRepoProps {
 	focusedColumn: "repos" | "skills" | null;
@@ -226,12 +221,6 @@ export function ViewByRepo({
 		skillsList.reset();
 	}, [searchFilter]);
 
-	const visibleSkills = filteredSkills.slice(
-		skillsList.scrollOffset,
-		skillsList.scrollOffset + adjustedVH,
-	);
-	const hasMore = skillsList.scrollOffset + adjustedVH < filteredSkills.length;
-
 	return (
 		<>
 			{/* Repos column */}
@@ -277,87 +266,16 @@ export function ViewByRepo({
 
 			{/* Skills column */}
 			{showSkills && (
-				<box
-					flexDirection="column"
-					width={40}
-					flexGrow={1}
-					border
-					borderStyle={focusedColumn === "skills" ? "double" : "rounded"}
-					borderColor={
-						focusedColumn === "skills" ? theme.lavender : theme.surface2
-					}
-					padding={1}
-					overflow="hidden"
-					title=" Skills (Space to select) "
-				>
-					{loadingSkills ? (
-						<text fg={theme.overlay1}>Loading skills...</text>
-					) : filteredSkills.length > 0 ? (
-						<>
-							{hasPrevious && (
-								<box paddingLeft={1} marginBottom={1}>
-									<text fg={theme.overlay1}>
-										{"\u2191"} {skillsList.scrollOffset} more above
-									</text>
-								</box>
-							)}
-							<box
-								flexDirection="column"
-								gap={0}
-								overflow="hidden"
-								flexGrow={1}
-							>
-								{visibleSkills.map((skill, visibleIndex) => {
-									const idx = skillsList.scrollOffset + visibleIndex;
-									const isHighlighted = idx === skillsList.index;
-									const isSelected = selectedSkills.has(skill);
-									const checkbox = isSelected ? `[${CHECK_MARK}] ` : "[ ] ";
-									const displayName = truncateText(skill, 31);
-									return (
-										<box
-											key={skill}
-											paddingLeft={1}
-											backgroundColor={
-												isHighlighted ? theme.surface1 : "transparent"
-											}
-										>
-											<text
-												fg={
-													isSelected
-														? theme.green
-														: isHighlighted
-															? theme.yellow
-															: theme.subtext1
-												}
-												attributes={
-													isHighlighted ? TextAttributes.BOLD : undefined
-												}
-											>
-												{checkbox}
-												{displayName}
-											</text>
-										</box>
-									);
-								})}
-							</box>
-							{hasMore && (
-								<box paddingLeft={1}>
-									<text fg={theme.overlay1}>
-										{"\u2193"}{" "}
-										{filteredSkills.length -
-											skillsList.scrollOffset -
-											adjustedVH}{" "}
-										more below
-									</text>
-								</box>
-							)}
-						</>
-					) : searchFilter ? (
-						<text fg={theme.overlay1}>No skills match filter</text>
-					) : (
-						<text fg={theme.overlay1}>No skills available</text>
-					)}
-				</box>
+				<SkillsList
+					focusedColumn={focusedColumn}
+					filteredSkills={filteredSkills}
+					selectedSkills={selectedSkills}
+					loadingSkills={loadingSkills}
+					searchFilter={searchFilter}
+					scrollOffset={skillsList.scrollOffset}
+					activeIndex={skillsList.index}
+					adjustedVH={adjustedVH}
+				/>
 			)}
 		</>
 	);

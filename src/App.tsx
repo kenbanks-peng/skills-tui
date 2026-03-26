@@ -18,6 +18,8 @@ import type { AgentConfig, UniversalAgents, RepoSource } from "./config";
 import { checkArgs, updateArgs } from "./skills-cli";
 import { ServicesPanel } from "./ServicesPanel";
 import { SettingsPanel } from "./SettingsPanel";
+import { SearchFilter } from "./SearchFilter";
+import { Footer } from "./Footer";
 import { ViewBySkill } from "./services/ViewBySkill";
 import { ViewByRepo } from "./services/ViewByRepo";
 import { Find } from "./services/Find";
@@ -329,32 +331,10 @@ export function App() {
 					</box>
 
 					{showSearch && (
-						<box
-							border
-							borderStyle={focusedColumn === "search" ? "double" : "rounded"}
-							borderColor={
-								focusedColumn === "search" ? theme.lavender : theme.surface2
-							}
-							paddingLeft={1}
-							paddingRight={1}
-							height={3}
-							flexShrink={0}
-							title=" Filter "
-						>
-							<box flexDirection="row">
-								<text fg={theme.overlay1}>{"\u203a "}</text>
-								{searchFilter ? (
-									<text fg={theme.text}>{searchFilter}</text>
-								) : focusedColumn !== "search" ? (
-									<text fg={theme.overlay0}>Type to filter skills...</text>
-								) : null}
-								{focusedColumn === "search" && (
-									<text fg={theme.lavender} attributes={TextAttributes.BOLD}>
-										{"\u258e"}
-									</text>
-								)}
-							</box>
-						</box>
+						<SearchFilter
+							focused={focusedColumn === "search"}
+							searchFilter={searchFilter}
+						/>
 					)}
 				</box>
 			</box>
@@ -368,48 +348,10 @@ export function App() {
 				</box>
 			)}
 
-			{/* Footer */}
-			<box
-				paddingLeft={1}
-				paddingRight={1}
-				borderStyle="single"
-				borderColor={theme.surface1}
-				flexDirection="row"
-				alignItems="center"
-				justifyContent="space-between"
-			>
-				<box flexDirection="column">
-					<ascii-font font="tiny" text="Skills" color={theme.mauve} />
-					<text>
-						<span fg={theme.green}>{"   \u23bc\u23bc\u22b0"}</span>
-						<span fg={theme.red}>{"\u2985@"}</span>
-					</text>
-				</box>
-				<text fg={theme.subtext0}>
-					<span fg={theme.sapphire}>Navigate: </span>
-					<span fg={theme.overlay1}>Tab/Arrows</span>
-					{focusedColumn === "content2" &&
-					selectedServiceId === ServiceId.VIEW_BY_REPO ? (
-						<>
-							<span fg={theme.sapphire}>{"   "}Jump: </span>
-							<span fg={theme.overlay1}>PgUp/PgDn</span>
-							<span fg={theme.sapphire}>{"   "}Toggle: </span>
-							<span fg={theme.overlay1}>Space</span>
-							<span fg={theme.sapphire}>{"   "}Install: </span>
-							<span fg={theme.overlay1}>Enter</span>
-						</>
-					) : (
-						<>
-							<span fg={theme.sapphire}>{"   "}Select: </span>
-							<span fg={theme.overlay1}>Enter</span>
-							<span fg={theme.sapphire}>{"   "}Toggle: </span>
-							<span fg={theme.overlay1}>Space</span>
-						</>
-					)}
-					<span fg={theme.sapphire}>{"   "}Quit: </span>
-					<span fg={theme.overlay1}>Esc</span>
-				</text>
-			</box>
+			<Footer
+				focusedColumn={focusedColumn}
+				selectedServiceId={selectedServiceId}
+			/>
 		</box>
 	);
 }

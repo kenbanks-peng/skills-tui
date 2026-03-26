@@ -1,12 +1,12 @@
-import { TextAttributes } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useState, useEffect } from "react";
-import { theme, CHECK_MARK } from "../theme";
+import { theme } from "../theme";
 import { viewportHeight } from "../utils";
 import { parseInstalledSkills } from "../skills";
 import type { InstalledSkillInfo } from "../skills";
 import type { AgentConfig, UniversalAgents } from "../config";
 import { useScrollableList } from "../useScrollableList";
+import { SkillTable } from "../SkillTable";
 
 interface ViewBySkillProps {
 	focused: boolean;
@@ -125,102 +125,15 @@ export function ViewBySkill({
 				</text>
 			) : (
 				<box flexDirection="column" flexGrow={1}>
-					{(() => {
-						const nameColWidth =
-							Math.max(12, ...filteredSkills.map((s) => s.name.length)) + 2;
-						const agentColWidth =
-							Math.max(...visibleAgents.map((a) => a.display.length), 6) + 2;
-						const centerPad = (text: string, width: number) => {
-							const pad = Math.max(0, width - text.length);
-							const left = Math.floor(pad / 2);
-							return " ".repeat(left) + text + " ".repeat(pad - left);
-						};
-						const totalRowWidth =
-							nameColWidth + agentColWidth * visibleAgents.length;
-						const header =
-							"Skill".padEnd(nameColWidth) +
-							visibleAgents
-								.map((a) => centerPad(a.display, agentColWidth))
-								.join("");
-						const separator = "\u2500".repeat(totalRowWidth);
-
-						const hasPrevious = scrollList.scrollOffset > 0;
-						const visibleSkills = filteredSkills.slice(
-							scrollList.scrollOffset,
-							scrollList.scrollOffset + vh,
-						);
-						const hasMore =
-							scrollList.scrollOffset + vh < filteredSkills.length;
-
-						return (
-							<>
-								<box flexDirection="column" flexShrink={0}>
-									<text fg={theme.lavender} attributes={TextAttributes.BOLD}>
-										{header}
-									</text>
-									<text fg={theme.surface2}>{separator}</text>
-								</box>
-								{hasPrevious && (
-									<box height={1} flexShrink={0}>
-										<text fg={theme.overlay1}>
-											{" "}
-											{"\u2191"} {scrollList.scrollOffset} more above
-										</text>
-									</box>
-								)}
-								<box flexDirection="column" height={vh} overflow="hidden">
-									{visibleSkills.map((skill, visibleIdx) => {
-										const idx = scrollList.scrollOffset + visibleIdx;
-										const isHighlighted = focused && idx === scrollList.index;
-										return (
-											<box
-												key={skill.name}
-												width={totalRowWidth}
-												backgroundColor={
-													isHighlighted ? theme.surface1 : "transparent"
-												}
-											>
-												<text>
-													<span
-														fg={isHighlighted ? theme.yellow : theme.text}
-														attributes={
-															isHighlighted ? TextAttributes.BOLD : undefined
-														}
-													>
-														{skill.name.padEnd(nameColWidth)}
-													</span>
-													{visibleAgents.map((a) => {
-														const linked = isLinked(skill, a);
-														return (
-															<span
-																key={a.name}
-																fg={linked ? theme.green : theme.overlay0}
-															>
-																{centerPad(
-																	linked ? CHECK_MARK : "\u00b7",
-																	agentColWidth,
-																)}
-															</span>
-														);
-													})}
-												</text>
-											</box>
-										);
-									})}
-								</box>
-								{hasMore && (
-									<box height={1} flexShrink={0}>
-										<text fg={theme.overlay1}>
-											{" "}
-											{"\u2193"}{" "}
-											{filteredSkills.length - scrollList.scrollOffset - vh}{" "}
-											more below
-										</text>
-									</box>
-								)}
-							</>
-						);
-					})()}
+					<SkillTable
+						filteredSkills={filteredSkills}
+						visibleAgents={visibleAgents}
+						focused={focused}
+						scrollOffset={scrollList.scrollOffset}
+						activeIndex={scrollList.index}
+						viewportHeight={vh}
+						isLinked={isLinked}
+					/>
 				</box>
 			)}
 		</box>
