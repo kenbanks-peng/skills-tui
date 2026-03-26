@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CommandOutput } from "../CommandOutput";
-import { updateCmd } from "../skills-cli";
+import { updateArgs } from "../skills-cli";
 
 interface UpdateProps {
 	focused: boolean;
@@ -15,7 +15,7 @@ export function Update({
 	selectedAgents,
 	onBack,
 }: UpdateProps) {
-	const [command] = useState(() => updateCmd(isGlobal, selectedAgents));
+	const [args] = useState(() => updateArgs(isGlobal, selectedAgents));
 
-	return <CommandOutput command={command} focused={focused} onBack={onBack} />;
+	return <CommandOutput args={args} focused={focused} onBack={onBack} />;
 }

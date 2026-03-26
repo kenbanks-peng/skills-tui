@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CommandOutput } from "../CommandOutput";
-import { checkCmd } from "../skills-cli";
+import { checkArgs } from "../skills-cli";
 
 interface CheckProps {
 	focused: boolean;
@@ -15,7 +15,7 @@ export function Check({
 	selectedAgents,
 	onBack,
 }: CheckProps) {
-	const [command] = useState(() => checkCmd(isGlobal, selectedAgents));
+	const [args] = useState(() => checkArgs(isGlobal, selectedAgents));
 
-	return <CommandOutput command={command} focused={focused} onBack={onBack} />;
+	return <CommandOutput args={args} focused={focused} onBack={onBack} />;
 }

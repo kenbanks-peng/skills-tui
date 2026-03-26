@@ -10,8 +10,8 @@ import {
 	installLocalSkill,
 	removeLocalSkill,
 } from "../skills";
-import { truncateText, logCmd, isFileRepo, repoDisplayName } from "../utils";
-import { addArgs, removeArgs } from "../skills-cli";
+import { truncateText, isFileRepo, repoDisplayName } from "../utils";
+import { addSkill, removeSkill } from "../skills-cli";
 import type { AgentConfig, RepoSource } from "../config";
 
 interface ViewByRepoProps {
@@ -112,42 +112,28 @@ export function ViewByRepo({
 		}
 	}, [selectedRepo]);
 
-	const runSilently = (args: string[], skillName?: string) => {
-		const action = args.includes("remove") ? "removing" : "installing";
-		const label = skillName || args[args.length - 1];
-		logCmd("run", args);
-		const proc = Bun.spawn(args, {
-			stdout: "pipe",
-			stderr: "pipe",
-			env: { ...process.env },
-		});
-		Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-			proc.exited,
-		])
-			.then(([stdout, stderr, code]) => {
-				logCmd("done", args, code, stdout, stderr);
+	const runAction = (
+		action: "add" | "remove",
+		repoUrl: string,
+		skill?: string,
+	) => {
+		const label = skill || repoUrl;
+		const fn = action === "add" ? addSkill : removeSkill;
+		fn(isGlobal, selectedAgents, repoUrl, skill)
+			.then(({ code }) => {
 				if (code !== 0) {
-					onError(`ERROR while ${action} ${label}`);
+					onError(
+						`ERROR while ${action === "add" ? "installing" : "removing"} ${label}`,
+					);
 				} else {
 					onInstallComplete();
 				}
 			})
-			.catch((err) => {
-				logCmd("error", args, undefined, undefined, String(err));
-				onError(`ERROR while ${action} ${label}`);
+			.catch(() => {
+				onError(
+					`ERROR while ${action === "add" ? "installing" : "removing"} ${label}`,
+				);
 			});
-	};
-
-	const buildArgs = (
-		action: "add" | "remove",
-		repoUrl: string,
-		skill?: string,
-	): string[] => {
-		return action === "add"
-			? addArgs(isGlobal, selectedAgents, repoUrl, skill)
-			: removeArgs(isGlobal, selectedAgents, repoUrl, skill);
 	};
 
 	// Filter skills within selected repo
@@ -173,7 +159,7 @@ export function ViewByRepo({
 			if (filteredSkills.length > 0) {
 				onFocusSkills();
 			} else if (!isFileRepo(selectedRepo)) {
-				runSilently(buildArgs("add", selectedRepo));
+				runAction("add", selectedRepo);
 			}
 			return;
 		}
@@ -254,9 +240,9 @@ export function ViewByRepo({
 					}
 				} else {
 					if (isSelected) {
-						runSilently(buildArgs("remove", selectedRepo, skill), skill);
+						runAction("remove", selectedRepo, skill);
 					} else {
-						runSilently(buildArgs("add", selectedRepo, skill), skill);
+						runAction("add", selectedRepo, skill);
 					}
 				}
 				setSelectedSkills((prev) => {

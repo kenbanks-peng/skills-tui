@@ -2,7 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 import { useState } from "react";
 import { theme } from "../theme";
-import { findCmd } from "../skills-cli";
+import { findArgs } from "../skills-cli";
 import { CommandOutput } from "../CommandOutput";
 
 interface FindProps {
@@ -23,7 +23,7 @@ export function Find({
 	onExit,
 }: FindProps) {
 	const [query, setQuery] = useState("");
-	const [currentCommand, setCurrentCommand] = useState<string | null>(null);
+	const [currentArgs, setCurrentArgs] = useState<string[] | null>(null);
 
 	useKeyboard((key) => {
 		if (focusedColumn !== "find") return;
@@ -36,7 +36,7 @@ export function Find({
 			return;
 		}
 		if ((key.name === "enter" || key.name === "return") && query.trim()) {
-			setCurrentCommand(findCmd(isGlobal, query.trim()));
+			setCurrentArgs(findArgs(isGlobal, query.trim()));
 			onFocusOutput();
 			return;
 		}
@@ -83,10 +83,10 @@ export function Find({
 				</box>
 			</box>
 			<CommandOutput
-				command={currentCommand}
+				args={currentArgs}
 				focused={focusedColumn === "output"}
 				onBack={() => {
-					setCurrentCommand(null);
+					setCurrentArgs(null);
 					onBack();
 				}}
 			/>

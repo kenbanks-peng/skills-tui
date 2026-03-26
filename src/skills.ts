@@ -11,8 +11,8 @@ import {
 } from "fs";
 import { cacheDir } from "./config";
 import type { AgentConfig } from "./config";
-import { logCmd, isFileRepo, fileUrlToPath } from "./utils";
-import { listArgs, addListArgs } from "./skills-cli";
+import { fileUrlToPath } from "./utils";
+import { listSkills, listRepoSkills } from "./skills-cli";
 
 // Installed skill info: skill name -> set of agent names
 export interface InstalledSkillInfo {
@@ -67,17 +67,7 @@ export async function parseInstalledSkills(
 	agentNames: string[],
 ): Promise<InstalledSkillInfo[]> {
 	try {
-		const args = listArgs(isGlobal, agentNames);
-		logCmd("parseInstalledSkills", args);
-		const proc = Bun.spawn(args, {
-			stdout: "pipe",
-			stderr: "pipe",
-			env: { ...process.env },
-		});
-		const text = await new Response(proc.stdout).text();
-		const stderrText = await new Response(proc.stderr).text();
-		const code = await proc.exited;
-		logCmd("parseInstalledSkills done", args, code, text, stderrText);
+		const text = await listSkills(isGlobal, agentNames);
 
 		// Strip ANSI codes
 		const clean = text.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
@@ -173,17 +163,7 @@ export async function loadSkillsFromRepo(repo: string): Promise<string[]> {
 		}
 
 		// Fetch fresh data
-		const args = addListArgs(repo);
-		logCmd("loadSkillsFromRepo", args);
-		const proc = Bun.spawn(args, {
-			stdout: "pipe",
-			stderr: "pipe",
-			env: { ...process.env },
-		});
-		const text = await new Response(proc.stdout).text();
-		const stderrText = await new Response(proc.stderr).text();
-		const code = await proc.exited;
-		logCmd("loadSkillsFromRepo done", args, code, text, stderrText);
+		const text = await listRepoSkills(repo);
 
 		// Parse skill names from the output
 		const skills: string[] = [];
