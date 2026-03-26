@@ -1,8 +1,8 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useState } from "react";
-import { SkillsList } from "../components/SkillsList";
-import { useScrollableList } from "../hooks/useScrollableList";
-import type { AgentConfig, RepoSource } from "../lib/config";
+import { SkillsList } from "#components/SkillsList";
+import { useScrollableList } from "#hooks/useScrollableList";
+import type { AgentConfig, RepoSource } from "#lib/config";
 import {
 	getInstalledLocalSkills,
 	installLocalSkill,
@@ -10,10 +10,10 @@ import {
 	loadInstalledSkills,
 	loadSkillsFromRepo,
 	removeLocalSkill,
-} from "../lib/skills";
-import { addSkill, removeSkill } from "../lib/skills-cli";
-import { theme } from "../lib/theme";
-import { isFileRepo, repoDisplayName, viewportHeight } from "../lib/utils";
+} from "#lib/skills";
+import { addSkill, removeSkill } from "#lib/skills-cli";
+import { theme } from "#lib/theme";
+import { isFileRepo, repoDisplayName, viewportHeight } from "#lib/utils";
 
 interface ViewByRepoProps {
 	focusedColumn: "repos" | "skills" | null;

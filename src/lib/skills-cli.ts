@@ -1,8 +1,8 @@
 // Centralized CLI interface for the skills CLI.
 // Every invocation of `bunx skills` / `npx skills` goes through here.
 
-import { collectStream, spawn } from "./compat";
-import { ensureOpencode, getRunner, logCmd } from "./utils";
+import { collectStream, spawn } from "#lib/compat";
+import { ensureOpencode, getRunner, logCmd } from "#lib/utils";
 
 function base(...rest: string[]): string[] {
 	return [getRunner(), "skills", ...rest];

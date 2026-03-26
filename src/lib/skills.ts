@@ -8,11 +8,11 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { existsSync, readTextFile, writeTextFile } from "./compat";
-import type { AgentConfig } from "./config";
-import { cacheDir } from "./config";
-import { listRepoSkills, listSkills } from "./skills-cli";
-import { fileUrlToPath, stripAnsi } from "./utils";
+import { existsSync, readTextFile, writeTextFile } from "#lib/compat";
+import type { AgentConfig } from "#lib/config";
+import { cacheDir } from "#lib/config";
+import { listRepoSkills, listSkills } from "#lib/skills-cli";
+import { fileUrlToPath, stripAnsi } from "#lib/utils";
 
 // Installed skill info: skill name -> set of agent names
 export interface InstalledSkillInfo {

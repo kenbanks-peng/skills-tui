@@ -1,8 +1,13 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { resolveAgent } from "./agent-registry";
-import { existsSync, parseToml, readTextFile, writeTextFile } from "./compat";
+import { resolveAgent } from "#lib/agent-registry";
+import {
+	existsSync,
+	parseToml,
+	readTextFile,
+	writeTextFile,
+} from "#lib/compat";
 
 // XDG-style paths
 export const configDir = join(homedir(), ".config", "skills-tui");

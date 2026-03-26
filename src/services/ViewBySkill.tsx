@@ -1,12 +1,12 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useState } from "react";
-import { SkillTable } from "../components/SkillTable";
-import { useScrollableList } from "../hooks/useScrollableList";
-import type { AgentConfig, UniversalAgents } from "../lib/config";
-import type { InstalledSkillInfo } from "../lib/skills";
-import { parseInstalledSkills } from "../lib/skills";
-import { theme } from "../lib/theme";
-import { viewportHeight } from "../lib/utils";
+import { SkillTable } from "#components/SkillTable";
+import { useScrollableList } from "#hooks/useScrollableList";
+import type { AgentConfig, UniversalAgents } from "#lib/config";
+import type { InstalledSkillInfo } from "#lib/skills";
+import { parseInstalledSkills } from "#lib/skills";
+import { theme } from "#lib/theme";
+import { viewportHeight } from "#lib/utils";
 
 interface ViewBySkillProps {
 	focused: boolean;

@@ -1,5 +1,5 @@
-import { theme } from "../lib/theme";
-import { ServiceId } from "../services";
+import { theme } from "#lib/theme";
+import { ServiceId } from "#services/index";
 
 interface FooterProps {
 	focusedColumn: string;

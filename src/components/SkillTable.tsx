@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core";
-import type { AgentConfig } from "../lib/config";
-import type { InstalledSkillInfo } from "../lib/skills";
-import { CHECK_MARK, theme } from "../lib/theme";
+import type { AgentConfig } from "#lib/config";
+import type { InstalledSkillInfo } from "#lib/skills";
+import { CHECK_MARK, theme } from "#lib/theme";
 
 interface SkillTableProps {
 	filteredSkills: InstalledSkillInfo[];

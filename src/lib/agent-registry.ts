@@ -1,4 +1,4 @@
-import type { AgentConfig } from "./config";
+import type { AgentConfig } from "#lib/config";
 
 // Standard agent skills paths (used as defaults when local/global not specified)
 const STD_LOCAL = ".agents/skills/";

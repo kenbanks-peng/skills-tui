@@ -1,5 +1,5 @@
 import { appendFileSync } from "node:fs";
-import { spawnSync } from "./compat";
+import { spawnSync } from "#lib/compat";
 
 const logPath = "/tmp/skills-tui.log";
 

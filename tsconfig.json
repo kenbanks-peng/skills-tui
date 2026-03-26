@@ -7,7 +7,14 @@
 		"jsxImportSource": "@opentui/react",
 		"strict": true,
 		"skipLibCheck": true,
-		"noEmit": true
+		"noEmit": true,
+		"baseUrl": ".",
+		"paths": {
+			"#components/*": ["./src/components/*"],
+			"#hooks/*": ["./src/hooks/*"],
+			"#lib/*": ["./src/lib/*"],
+			"#services/*": ["./src/services/*"]
+		}
 	},
 	"include": ["src"]
 }

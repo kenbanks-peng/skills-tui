@@ -1,8 +1,8 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import { type ProcessHandle, spawn, spawnSync } from "../lib/compat";
-import { theme } from "../lib/theme";
-import { stripAnsi } from "../lib/utils";
+import { type ProcessHandle, spawn, spawnSync } from "#lib/compat";
+import { theme } from "#lib/theme";
+import { stripAnsi } from "#lib/utils";
 
 // Check once at startup whether a clipboard command is available.
 const clipboardCmd = ((): string | null => {

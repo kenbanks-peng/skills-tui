@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core";
-import { theme } from "../lib/theme";
-import type { Service } from "../services";
+import { theme } from "#lib/theme";
+import type { Service } from "#services/index";
 
 interface ServicesPanelProps {
 	focused: boolean;
