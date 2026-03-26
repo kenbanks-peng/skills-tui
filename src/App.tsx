@@ -16,10 +16,10 @@ import {
 } from "./config";
 import type { AgentConfig, UniversalAgents, RepoSource } from "./config";
 import { checkArgs, updateArgs } from "./skills-cli";
-import { ServicesPanel } from "./ServicesPanel";
-import { SettingsPanel } from "./SettingsPanel";
-import { SearchFilter } from "./SearchFilter";
-import { Footer } from "./Footer";
+import { ServicesPanel } from "./components/ServicesPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
+import { SearchFilter } from "./components/SearchFilter";
+import { Footer } from "./components/Footer";
 import { ViewBySkill } from "./services/ViewBySkill";
 import { ViewByRepo } from "./services/ViewByRepo";
 import { Find } from "./services/Find";

@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core";
-import { theme } from "./theme";
+import { theme } from "../theme";
 
 interface SearchFilterProps {
 	focused: boolean;

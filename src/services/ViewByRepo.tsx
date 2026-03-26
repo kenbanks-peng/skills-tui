@@ -13,7 +13,7 @@ import { isFileRepo, repoDisplayName, viewportHeight } from "../utils";
 import { addSkill, removeSkill } from "../skills-cli";
 import type { AgentConfig, RepoSource } from "../config";
 import { useScrollableList } from "../useScrollableList";
-import { SkillsList } from "./SkillsList";
+import { SkillsList } from "../components/SkillsList";
 
 interface ViewByRepoProps {
 	focusedColumn: "repos" | "skills" | null;

@@ -3,7 +3,7 @@ import { useKeyboard } from "@opentui/react";
 import { useState } from "react";
 import { theme } from "../theme";
 import { findArgs } from "../skills-cli";
-import { CommandOutput } from "../CommandOutput";
+import { CommandOutput } from "../components/CommandOutput";
 
 interface FindProps {
 	focusedColumn: "find" | "output" | null;

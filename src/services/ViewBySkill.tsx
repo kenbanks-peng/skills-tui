@@ -6,7 +6,7 @@ import { parseInstalledSkills } from "../skills";
 import type { InstalledSkillInfo } from "../skills";
 import type { AgentConfig, UniversalAgents } from "../config";
 import { useScrollableList } from "../useScrollableList";
-import { SkillTable } from "../SkillTable";
+import { SkillTable } from "../components/SkillTable";
 
 interface ViewBySkillProps {
 	focused: boolean;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CommandOutput } from "../CommandOutput";
+import { CommandOutput } from "../components/CommandOutput";
 
 interface CommandServiceProps {
 	focused: boolean;
