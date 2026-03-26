@@ -230,7 +230,8 @@ export function resolveAgent(
 		| { name: string; display?: string; local?: string; global?: string },
 ): AgentConfig {
 	const name = typeof entry === "string" ? entry : entry.name;
-	const overrides = typeof entry === "string" ? {} : entry;
+	const overrides: { display?: string; local?: string; global?: string } =
+		typeof entry === "string" ? {} : entry;
 	const builtin = registryMap.get(name);
 
 	const display =

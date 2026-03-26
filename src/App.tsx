@@ -77,7 +77,7 @@ export function App() {
 		selectedServiceId === ServiceId.VIEW_BY_SKILL;
 
 	const navigateForward = () => {
-		setFocusedColumn((prev) => {
+		setFocusedColumn((prev: FocusedColumn) => {
 			if (prev === "services") return "content";
 			if (prev === "content" && hasContent2) return "content2";
 			if (prev === "content") return showSearch ? "search" : "settings";
@@ -89,7 +89,7 @@ export function App() {
 	};
 
 	const navigateBackward = () => {
-		setFocusedColumn((prev) => {
+		setFocusedColumn((prev: FocusedColumn) => {
 			if (prev === "services") return "settings";
 			if (prev === "settings")
 				return showSearch ? "search" : hasContent2 ? "content2" : "content";
@@ -129,7 +129,7 @@ export function App() {
 				return;
 			}
 			if (key.name === "backspace") {
-				setSearchFilter((prev) => prev.slice(0, -1));
+				setSearchFilter((prev: string) => prev.slice(0, -1));
 				return;
 			}
 			if (
@@ -139,7 +139,7 @@ export function App() {
 				!key.meta &&
 				key.sequence.charCodeAt(0) >= 32
 			) {
-				setSearchFilter((prev) => prev + key.sequence);
+				setSearchFilter((prev: string) => prev + key.sequence);
 				return;
 			}
 			return;
@@ -178,7 +178,7 @@ export function App() {
 		}
 
 		if (focusedColumn === "services" && key.name === "g") {
-			setIsGlobal((prev) => !prev);
+			setIsGlobal((prev: boolean) => !prev);
 			return;
 		}
 	});
@@ -253,14 +253,16 @@ export function App() {
 						agents={agents}
 						selectedAgents={selectedAgents}
 						activeSettingIndex={activeSettingIndex}
-						onToggleGlobal={() => setIsGlobal((prev) => !prev)}
+						onToggleGlobal={() => setIsGlobal((prev: boolean) => !prev)}
 						onToggleAgent={(agent) => {
-							setSelectedAgents((prev) => {
+							setSelectedAgents((prev: Set<string>) => {
 								const newSet = new Set(prev);
 								if (newSet.has(agent)) newSet.delete(agent);
 								else newSet.add(agent);
 								const disabled = new Set(
-									agents.filter((a) => !newSet.has(a.name)).map((a) => a.name),
+									agents
+										.filter((a: AgentConfig) => !newSet.has(a.name))
+										.map((a: AgentConfig) => a.name),
 								);
 								saveDisabledAgents(disabled);
 								return newSet;

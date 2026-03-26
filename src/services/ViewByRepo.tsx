@@ -83,6 +83,7 @@ export function ViewByRepo({
 	const repoSelectHeight = viewportHeight(height, 15, 5);
 	const repoOptions = filteredRepos.map((repo) => ({
 		name: repoDisplayName(repo),
+		description: "",
 	}));
 
 	// Skills scrollable list

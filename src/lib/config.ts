@@ -157,7 +157,7 @@ export async function loadAgents(): Promise<AgentConfig[]> {
 	try {
 		const file = Bun.file(configPath);
 		if (!(await file.exists())) return [];
-		const config: Record<string, unknown> = Bun.TOML.parse(await file.text());
+		const config = Bun.TOML.parse(await file.text()) as Record<string, unknown>;
 
 		// [agents] enabled = ["claude-code", "cursor", ...] — resolve from builtin registry
 		const agentsSection = config?.agents as Record<string, unknown> | undefined;
@@ -192,7 +192,7 @@ export async function loadUniversalAgents(): Promise<UniversalAgents> {
 	try {
 		const file = Bun.file(configPath);
 		if (!(await file.exists())) return empty;
-		const config: Record<string, unknown> = Bun.TOML.parse(await file.text());
+		const config = Bun.TOML.parse(await file.text()) as Record<string, unknown>;
 		const agentsSection = config?.agents as Record<string, unknown> | undefined;
 		const universal = agentsSection?.universal as
 			| Record<string, unknown>
@@ -212,7 +212,7 @@ export async function loadRepos(): Promise<RepoSource[]> {
 	try {
 		const file = Bun.file(configPath);
 		if (!(await file.exists())) return [];
-		const config: Record<string, unknown> = Bun.TOML.parse(await file.text());
+		const config = Bun.TOML.parse(await file.text()) as Record<string, unknown>;
 		const repos = config?.repos;
 		if (!Array.isArray(repos)) return [];
 		return repos.filter((r: unknown) => typeof r === "string") as string[];

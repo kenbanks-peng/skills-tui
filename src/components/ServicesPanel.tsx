@@ -19,7 +19,10 @@ export function ServicesPanel({
 	onServiceChange,
 	onServiceSelect,
 }: ServicesPanelProps) {
-	const serviceOptions = services.map((svc) => ({ name: svc.name }));
+	const serviceOptions = services.map((svc) => ({
+		name: svc.name,
+		description: "",
+	}));
 
 	return (
 		<box
