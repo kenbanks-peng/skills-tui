@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { resolveAgent } from "./agent-registry";
+import { existsSync, parseToml, readTextFile, writeTextFile } from "./compat";
 
 // XDG-style paths
 export const configDir = join(homedir(), ".config", "skills-tui");
@@ -136,9 +137,9 @@ export function ensureDirectories() {
 // Load disabled agents from state file
 export async function loadDisabledAgents(): Promise<Set<string>> {
 	try {
-		const file = Bun.file(disabledAgentsPath);
-		if (!(await file.exists())) return new Set();
-		const data: unknown = JSON.parse(await file.text());
+		const text = await readTextFile(disabledAgentsPath);
+		if (text === null) return new Set();
+		const data: unknown = JSON.parse(text);
 		if (Array.isArray(data)) return new Set(data);
 		return new Set();
 	} catch {
@@ -149,15 +150,15 @@ export async function loadDisabledAgents(): Promise<Set<string>> {
 // Save disabled agents to state file
 export async function saveDisabledAgents(disabled: Set<string>): Promise<void> {
 	mkdirSync(stateDir, { recursive: true });
-	await Bun.write(disabledAgentsPath, JSON.stringify([...disabled]));
+	await writeTextFile(disabledAgentsPath, JSON.stringify([...disabled]));
 }
 
 // Load agents from config.toml
 export async function loadAgents(): Promise<AgentConfig[]> {
 	try {
-		const file = Bun.file(configPath);
-		if (!(await file.exists())) return [];
-		const config = Bun.TOML.parse(await file.text()) as Record<string, unknown>;
+		const text = await readTextFile(configPath);
+		if (text === null) return [];
+		const config = parseToml(text) as Record<string, unknown>;
 
 		// [agents] enabled = ["claude-code", "cursor", ...] — resolve from builtin registry
 		const agentsSection = config?.agents as Record<string, unknown> | undefined;
@@ -190,9 +191,9 @@ export async function loadAgents(): Promise<AgentConfig[]> {
 export async function loadUniversalAgents(): Promise<UniversalAgents> {
 	const empty: UniversalAgents = { both: new Set(), local: new Set() };
 	try {
-		const file = Bun.file(configPath);
-		if (!(await file.exists())) return empty;
-		const config = Bun.TOML.parse(await file.text()) as Record<string, unknown>;
+		const text = await readTextFile(configPath);
+		if (text === null) return empty;
+		const config = parseToml(text) as Record<string, unknown>;
 		const agentsSection = config?.agents as Record<string, unknown> | undefined;
 		const universal = agentsSection?.universal as
 			| Record<string, unknown>
@@ -210,9 +211,9 @@ export async function loadUniversalAgents(): Promise<UniversalAgents> {
 // Load repos from config.toml
 export async function loadRepos(): Promise<RepoSource[]> {
 	try {
-		const file = Bun.file(configPath);
-		if (!(await file.exists())) return [];
-		const config = Bun.TOML.parse(await file.text()) as Record<string, unknown>;
+		const text = await readTextFile(configPath);
+		if (text === null) return [];
+		const config = parseToml(text) as Record<string, unknown>;
 		const repos = config?.repos;
 		if (!Array.isArray(repos)) return [];
 		return repos.filter((r: unknown) => typeof r === "string") as string[];

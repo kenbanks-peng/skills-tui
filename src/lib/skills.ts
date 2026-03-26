@@ -1,6 +1,5 @@
 import {
 	cpSync,
-	existsSync,
 	lstatSync,
 	mkdirSync,
 	readdirSync,
@@ -9,6 +8,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { existsSync, readTextFile, writeTextFile } from "./compat";
 import type { AgentConfig } from "./config";
 import { cacheDir } from "./config";
 import { listRepoSkills, listSkills } from "./skills-cli";
@@ -33,9 +33,9 @@ export async function loadInstalledSkills(
 		const baseDir = agentsSkillsDir(isGlobal);
 		const installed = new Set<string>();
 		for (const lockPath of lockPaths) {
-			const file = Bun.file(lockPath);
-			if (!(await file.exists())) continue;
-			const data = JSON.parse(await file.text());
+			const text = await readTextFile(lockPath);
+			if (text === null) continue;
+			const data = JSON.parse(text);
 			if (!data.skills) continue;
 			let pruned = false;
 			for (const [skillName, info] of Object.entries(data.skills) as [
@@ -52,7 +52,7 @@ export async function loadInstalledSkills(
 				}
 			}
 			if (pruned) {
-				await Bun.write(lockPath, JSON.stringify(data, null, 2));
+				await writeTextFile(lockPath, JSON.stringify(data, null, 2));
 			}
 		}
 		return installed;
@@ -121,11 +121,10 @@ function getCachePath(): string {
 async function readCache(): Promise<SkillCache> {
 	try {
 		const cachePath = getCachePath();
-		const file = Bun.file(cachePath);
-		if (!(await file.exists())) {
+		const text = await readTextFile(cachePath);
+		if (text === null) {
 			return {};
 		}
-		const text = await file.text();
 		return JSON.parse(text);
 	} catch (err) {
 		console.error("Failed to read cache:", err);
@@ -137,7 +136,7 @@ async function readCache(): Promise<SkillCache> {
 async function writeCache(cache: SkillCache): Promise<void> {
 	try {
 		const cachePath = getCachePath();
-		await Bun.write(cachePath, JSON.stringify(cache, null, 2));
+		await writeTextFile(cachePath, JSON.stringify(cache, null, 2));
 	} catch (err) {
 		console.error("Failed to write cache:", err);
 	}

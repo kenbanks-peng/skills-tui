@@ -1,4 +1,5 @@
 import { appendFileSync } from "node:fs";
+import { spawnSync } from "./compat";
 
 const logPath = "/tmp/skills-tui.log";
 
@@ -7,7 +8,7 @@ let _runner: string | undefined;
 export function getRunner(): string {
 	if (_runner) return _runner;
 	try {
-		const result = Bun.spawnSync(["which", "bunx"], {
+		const result = spawnSync(["which", "bunx"], {
 			stdout: "pipe",
 			stderr: "pipe",
 		});

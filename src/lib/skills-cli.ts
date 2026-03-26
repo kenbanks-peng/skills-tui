@@ -1,6 +1,7 @@
 // Centralized CLI interface for the skills CLI.
 // Every invocation of `bunx skills` / `npx skills` goes through here.
 
+import { collectStream, spawn } from "./compat";
 import { ensureOpencode, getRunner, logCmd } from "./utils";
 
 function base(...rest: string[]): string[] {
@@ -15,14 +16,14 @@ interface RunResult {
 
 async function run(args: string[]): Promise<RunResult> {
 	logCmd("run", args);
-	const proc = Bun.spawn(args, {
+	const proc = spawn(args, {
 		stdout: "pipe",
 		stderr: "pipe",
 		env: { ...process.env },
 	});
 	const [stdout, stderr, code] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
+		collectStream(proc.stdout),
+		collectStream(proc.stderr),
 		proc.exited,
 	]);
 	logCmd("done", args, code, stdout, stderr);

@@ -1,5 +1,6 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
+import { type ProcessHandle, spawn } from "../lib/compat";
 import { theme } from "../lib/theme";
 import { stripAnsi } from "../lib/utils";
 
@@ -16,7 +17,7 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 	const [hasOutput, setHasOutput] = useState(false);
 	const [output, setOutput] = useState<string>("");
 	const [copied, setCopied] = useState(false);
-	const procRef = useRef<ReturnType<typeof Bun.spawn> | null>(null);
+	const procRef = useRef<ProcessHandle | null>(null);
 
 	useKeyboard((key) => {
 		if (!focused) return;
@@ -44,9 +45,9 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 		// 'c' to copy output to clipboard (when not running)
 		if (key.name === "c" && !isRunning && output) {
 			const cleanOutput = stripAnsi(output);
-			const proc = Bun.spawn(["pbcopy"], { stdin: "pipe" });
-			proc.stdin.write(cleanOutput);
-			proc.stdin.end();
+			const proc = spawn(["pbcopy"], { stdin: "pipe" });
+			proc.stdin?.write(cleanOutput);
+			(proc.stdin as NodeJS.WritableStream | null)?.end();
 			setCopied(true);
 			setTimeout(() => setCopied(false), 2000);
 		}
@@ -68,7 +69,7 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 			setOutput("");
 
 			try {
-				const proc = Bun.spawn(args, {
+				const proc = spawn(args, {
 					stdout: "pipe",
 					stderr: "pipe",
 					env: { ...process.env, FORCE_COLOR: "1", TERM: "xterm-256color" },
@@ -76,33 +77,20 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 
 				procRef.current = proc;
 
-				const stdoutReader = proc.stdout.getReader();
-				const stderrReader = proc.stderr.getReader();
-
-				// Read stdout and stream to output
-				const readStdout = async () => {
-					while (true) {
-						const { done, value } = await stdoutReader.read();
-						if (done) break;
-						const chunk = new TextDecoder().decode(value);
-						setOutput((prev) => prev + chunk);
-						setHasOutput(true);
-					}
-				};
-
-				// Read stderr and stream to output
-				const readStderr = async () => {
-					while (true) {
-						const { done, value } = await stderrReader.read();
-						if (done) break;
-						const chunk = new TextDecoder().decode(value);
-						setOutput((prev) => prev + chunk);
-						setHasOutput(true);
-					}
+				const pipeStream = (stream: NodeJS.ReadableStream | null) => {
+					if (!stream) return Promise.resolve();
+					return new Promise<void>((resolve) => {
+						stream.on("data", (chunk: Buffer) => {
+							setOutput((prev) => prev + chunk.toString());
+							setHasOutput(true);
+						});
+						stream.on("end", resolve);
+						stream.on("error", resolve);
+					});
 				};
 
 				// Read both streams concurrently
-				await Promise.all([readStdout(), readStderr()]);
+				await Promise.all([pipeStream(proc.stdout), pipeStream(proc.stderr)]);
 
 				// Wait for process to exit
 				const code = await proc.exited;
