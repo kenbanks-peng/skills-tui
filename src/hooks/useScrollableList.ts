@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface ScrollableListResult {
 	index: number;
@@ -26,7 +26,7 @@ export function useScrollableList(
 			setIndex(itemCount - 1);
 			setScrollOffset(Math.max(0, itemCount - viewportHeight));
 		}
-	}, [itemCount]);
+	}, [itemCount, index, viewportHeight]);
 
 	const handlers: Record<string, () => void> = {
 		up: () => {

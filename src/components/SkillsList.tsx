@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core";
-import { theme, CHECK_MARK } from "../lib/theme";
+import { CHECK_MARK, theme } from "../lib/theme";
 import { truncateText } from "../lib/utils";
 
 interface SkillsListProps {

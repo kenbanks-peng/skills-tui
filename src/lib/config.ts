@@ -1,6 +1,6 @@
-import { join } from "path";
-import { homedir } from "os";
-import { mkdirSync, existsSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { resolveAgent } from "./agent-registry";
 
 // XDG-style paths
@@ -157,18 +157,22 @@ export async function loadAgents(): Promise<AgentConfig[]> {
 	try {
 		const file = Bun.file(configPath);
 		if (!(await file.exists())) return [];
-		const config: any = Bun.TOML.parse(await file.text());
+		const config: Record<string, unknown> = Bun.TOML.parse(await file.text());
 
 		// [agents] enabled = ["claude-code", "cursor", ...] — resolve from builtin registry
-		const agentNames: string[] = Array.isArray(config?.agents?.enabled)
-			? config.agents.enabled
+		const agentsSection = config?.agents as Record<string, unknown> | undefined;
+		const agentNames: string[] = Array.isArray(agentsSection?.enabled)
+			? agentsSection.enabled
 			: [];
 		const agents = new Map<string, AgentConfig>(
 			agentNames.map((name) => [name, resolveAgent(name)]),
 		);
 
 		// [[custom-agents]] — always enabled, overrides builtins
-		const customAgents: any[] = Array.isArray(config?.["custom-agents"])
+		const customAgents: (
+			| string
+			| { name: string; display?: string; local?: string; global?: string }
+		)[] = Array.isArray(config?.["custom-agents"])
 			? config["custom-agents"]
 			: [];
 		for (const entry of customAgents) {
@@ -188,8 +192,11 @@ export async function loadUniversalAgents(): Promise<UniversalAgents> {
 	try {
 		const file = Bun.file(configPath);
 		if (!(await file.exists())) return empty;
-		const config: any = Bun.TOML.parse(await file.text());
-		const universal = config?.agents?.universal;
+		const config: Record<string, unknown> = Bun.TOML.parse(await file.text());
+		const agentsSection = config?.agents as Record<string, unknown> | undefined;
+		const universal = agentsSection?.universal as
+			| Record<string, unknown>
+			| undefined;
 		if (!universal) return empty;
 		return {
 			both: new Set(Array.isArray(universal.both) ? universal.both : []),
@@ -205,10 +212,10 @@ export async function loadRepos(): Promise<RepoSource[]> {
 	try {
 		const file = Bun.file(configPath);
 		if (!(await file.exists())) return [];
-		const config: any = Bun.TOML.parse(await file.text());
+		const config: Record<string, unknown> = Bun.TOML.parse(await file.text());
 		const repos = config?.repos;
 		if (!Array.isArray(repos)) return [];
-		return repos.filter((r: any) => typeof r === "string");
+		return repos.filter((r: unknown) => typeof r === "string") as string[];
 	} catch {
 		return [];
 	}

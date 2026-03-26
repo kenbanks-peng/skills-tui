@@ -4,26 +4,26 @@ import {
 	useRenderer,
 	useTerminalDimensions,
 } from "@opentui/react";
-import { useState, useEffect } from "react";
-import { theme } from "./lib/theme";
-import { services, ServiceId } from "./services";
-import {
-	loadAgents,
-	loadRepos,
-	loadUniversalAgents,
-	loadDisabledAgents,
-	saveDisabledAgents,
-} from "./lib/config";
-import type { AgentConfig, UniversalAgents, RepoSource } from "./lib/config";
-import { checkArgs, updateArgs } from "./lib/skills-cli";
+import { useEffect, useState } from "react";
+import { Footer } from "./components/Footer";
+import { SearchFilter } from "./components/SearchFilter";
 import { ServicesPanel } from "./components/ServicesPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
-import { SearchFilter } from "./components/SearchFilter";
-import { Footer } from "./components/Footer";
-import { ViewBySkill } from "./services/ViewBySkill";
-import { ViewByRepo } from "./services/ViewByRepo";
-import { Find } from "./services/Find";
+import type { AgentConfig, RepoSource, UniversalAgents } from "./lib/config";
+import {
+	loadAgents,
+	loadDisabledAgents,
+	loadRepos,
+	loadUniversalAgents,
+	saveDisabledAgents,
+} from "./lib/config";
+import { checkArgs, updateArgs } from "./lib/skills-cli";
+import { theme } from "./lib/theme";
+import { ServiceId, services } from "./services";
 import { CommandService } from "./services/CommandService";
+import { Find } from "./services/Find";
+import { ViewByRepo } from "./services/ViewByRepo";
+import { ViewBySkill } from "./services/ViewBySkill";
 
 type FocusedColumn =
 	| "services"

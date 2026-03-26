@@ -1,4 +1,5 @@
-import { appendFileSync } from "fs";
+import { appendFileSync } from "node:fs";
+
 const logPath = "/tmp/skills-tui.log";
 
 // Resolve the package runner: prefer bunx, fall back to npx.
@@ -31,7 +32,7 @@ export function logCmd(
 	if (exitCode !== undefined) msg += `\n  exit=${exitCode}`;
 	if (stdout) msg += `\n  stdout: ${stdout.slice(0, 2000)}`;
 	if (stderr) msg += `\n  stderr: ${stderr.slice(0, 2000)}`;
-	appendFileSync(logPath, msg + "\n\n");
+	appendFileSync(logPath, `${msg}\n\n`);
 }
 
 // Ensure "opencode" is always in the agent list passed to the skills CLI.
@@ -62,10 +63,11 @@ export function repoDisplayName(repo: string): string {
 
 export function truncateText(text: string, maxLength: number): string {
 	if (text.length <= maxLength) return text;
-	return text.slice(0, maxLength - 3) + "...";
+	return `${text.slice(0, maxLength - 3)}...`;
 }
 
 export function stripAnsi(str: string): string {
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape stripping requires matching control characters
 	return str.replace(/\x1B\[[0-9;]*[A-Za-z]/g, "");
 }
 

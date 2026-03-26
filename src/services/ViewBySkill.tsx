@@ -1,12 +1,12 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { SkillTable } from "../components/SkillTable";
+import { useScrollableList } from "../hooks/useScrollableList";
+import type { AgentConfig, UniversalAgents } from "../lib/config";
+import type { InstalledSkillInfo } from "../lib/skills";
+import { parseInstalledSkills } from "../lib/skills";
 import { theme } from "../lib/theme";
 import { viewportHeight } from "../lib/utils";
-import { parseInstalledSkills } from "../lib/skills";
-import type { InstalledSkillInfo } from "../lib/skills";
-import type { AgentConfig, UniversalAgents } from "../lib/config";
-import { useScrollableList } from "../hooks/useScrollableList";
-import { SkillTable } from "../components/SkillTable";
 
 interface ViewBySkillProps {
 	focused: boolean;
@@ -24,7 +24,7 @@ export function ViewBySkill({
 	agents,
 	selectedAgents,
 	universalAgents,
-	refreshKey,
+	refreshKey: _refreshKey,
 	searchFilter,
 }: ViewBySkillProps) {
 	const { height } = useTerminalDimensions();
@@ -44,7 +44,7 @@ export function ViewBySkill({
 				setLoading(false);
 			});
 		}
-	}, [isGlobal, selectedAgents, agents, refreshKey]);
+	}, [isGlobal, selectedAgents, agents]);
 
 	const lowerFilter = searchFilter.toLowerCase();
 	const filteredSkills = searchFilter
@@ -66,7 +66,7 @@ export function ViewBySkill({
 	// Reset when filter changes
 	useEffect(() => {
 		scrollList.reset();
-	}, [searchFilter]);
+	}, [scrollList.reset]);
 
 	useKeyboard((key) => {
 		if (!focused || filteredSkills.length === 0) return;

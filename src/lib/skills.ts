@@ -1,18 +1,18 @@
-import { join, resolve } from "path";
-import { homedir } from "os";
 import {
-	readdirSync,
+	cpSync,
 	existsSync,
+	lstatSync,
 	mkdirSync,
+	readdirSync,
 	rmSync,
 	symlinkSync,
-	cpSync,
-	lstatSync,
-} from "fs";
-import { cacheDir } from "./config";
+} from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import type { AgentConfig } from "./config";
+import { cacheDir } from "./config";
+import { listRepoSkills, listSkills } from "./skills-cli";
 import { fileUrlToPath, stripAnsi } from "./utils";
-import { listSkills, listRepoSkills } from "./skills-cli";
 
 // Installed skill info: skill name -> set of agent names
 export interface InstalledSkillInfo {
@@ -40,7 +40,7 @@ export async function loadInstalledSkills(
 			let pruned = false;
 			for (const [skillName, info] of Object.entries(data.skills) as [
 				string,
-				any,
+				{ source?: string },
 			][]) {
 				if (!existsSync(join(baseDir, skillName))) {
 					delete data.skills[skillName];
@@ -179,7 +179,7 @@ export async function loadSkillsFromRepo(repo: string): Promise<string[]> {
 			if (inSkillsSection) {
 				// Look for lines that start with │ followed by a skill name
 				const match = trimmed.match(/^│\s+([a-z0-9-]+)$/);
-				if (match && match[1]) {
+				if (match?.[1]) {
 					skills.push(match[1]);
 				}
 				// Stop at the closing line

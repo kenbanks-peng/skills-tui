@@ -1,9 +1,9 @@
 import { TextAttributes } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useState } from "react";
-import { theme, CHECK_MARK } from "../lib/theme";
-import { viewportHeight } from "../lib/utils";
 import type { AgentConfig } from "../lib/config";
+import { CHECK_MARK, theme } from "../lib/theme";
+import { viewportHeight } from "../lib/utils";
 
 interface SettingsPanelProps {
 	focused: boolean;

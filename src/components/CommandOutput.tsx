@@ -1,5 +1,5 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { theme } from "../lib/theme";
 import { stripAnsi } from "../lib/utils";
 
@@ -10,13 +10,13 @@ interface CommandOutputProps {
 }
 
 export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
-	const { width, height } = useTerminalDimensions();
+	useTerminalDimensions();
 	const [isRunning, setIsRunning] = useState(false);
 	const [exitCode, setExitCode] = useState<number | null>(null);
 	const [hasOutput, setHasOutput] = useState(false);
 	const [output, setOutput] = useState<string>("");
 	const [copied, setCopied] = useState(false);
-	const procRef = useRef<any>(null);
+	const procRef = useRef<ReturnType<typeof Bun.spawn> | null>(null);
 
 	useKeyboard((key) => {
 		if (!focused) return;
@@ -110,7 +110,7 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 				setIsRunning(false);
 				procRef.current = null;
 			} catch (err) {
-				setOutput((prev) => prev + `Error running command: ${err}\n`);
+				setOutput((prev) => `${prev}Error running command: ${err}\n`);
 				setHasOutput(true);
 				setExitCode(1);
 				setIsRunning(false);

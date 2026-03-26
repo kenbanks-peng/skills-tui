@@ -1,19 +1,19 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { useState, useEffect } from "react";
-import { theme } from "../lib/theme";
+import { useEffect, useState } from "react";
+import { SkillsList } from "../components/SkillsList";
+import { useScrollableList } from "../hooks/useScrollableList";
+import type { AgentConfig, RepoSource } from "../lib/config";
 import {
-	loadInstalledSkills,
-	loadSkillsFromRepo,
-	listLocalSkills,
 	getInstalledLocalSkills,
 	installLocalSkill,
+	listLocalSkills,
+	loadInstalledSkills,
+	loadSkillsFromRepo,
 	removeLocalSkill,
 } from "../lib/skills";
-import { isFileRepo, repoDisplayName, viewportHeight } from "../lib/utils";
 import { addSkill, removeSkill } from "../lib/skills-cli";
-import type { AgentConfig, RepoSource } from "../lib/config";
-import { useScrollableList } from "../hooks/useScrollableList";
-import { SkillsList } from "../components/SkillsList";
+import { theme } from "../lib/theme";
+import { isFileRepo, repoDisplayName, viewportHeight } from "../lib/utils";
 
 interface ViewByRepoProps {
 	focusedColumn: "repos" | "skills" | null;
@@ -104,7 +104,7 @@ export function ViewByRepo({
 		) {
 			setSelectedRepo(filteredRepos[0]);
 		}
-	}, [filteredRepos.length, searchFilter]);
+	}, [filteredRepos.length, filteredRepos[0], selectedRepo]);
 
 	// Load skills when repo changes
 	useEffect(() => {
@@ -130,7 +130,7 @@ export function ViewByRepo({
 				});
 			}
 		}
-	}, [selectedRepo]);
+	}, [selectedRepo, isGlobal, skillsList.reset]);
 
 	const runAction = (
 		action: "add" | "remove",
@@ -194,7 +194,7 @@ export function ViewByRepo({
 							);
 						}
 						onInstallComplete();
-					} catch (err) {
+					} catch (_err) {
 						onError(
 							`ERROR while ${isSelected ? "removing" : "installing"} ${skill}`,
 						);
@@ -219,7 +219,7 @@ export function ViewByRepo({
 	// Reset skill index when filter changes
 	useEffect(() => {
 		skillsList.reset();
-	}, [searchFilter]);
+	}, [skillsList.reset]);
 
 	return (
 		<>
