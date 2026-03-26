@@ -1,8 +1,23 @@
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import { type ProcessHandle, spawn } from "../lib/compat";
+import { type ProcessHandle, spawn, spawnSync } from "../lib/compat";
 import { theme } from "../lib/theme";
 import { stripAnsi } from "../lib/utils";
+
+// Check once at startup whether a clipboard command is available.
+const clipboardCmd = ((): string | null => {
+	for (const cmd of ["pbcopy", "xclip", "xsel"]) {
+		try {
+			if (
+				spawnSync(["which", cmd], { stdout: "pipe", stderr: "pipe" })
+					.exitCode === 0
+			) {
+				return cmd;
+			}
+		} catch {}
+	}
+	return null;
+})();
 
 interface CommandOutputProps {
 	args: string[] | null;
@@ -43,9 +58,9 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 		}
 
 		// 'c' to copy output to clipboard (when not running)
-		if (key.name === "c" && !isRunning && output) {
+		if (key.name === "c" && !isRunning && output && clipboardCmd) {
 			const cleanOutput = stripAnsi(output);
-			const proc = spawn(["pbcopy"], { stdin: "pipe" });
+			const proc = spawn([clipboardCmd], { stdin: "pipe" });
 			proc.stdin?.write(cleanOutput);
 			(proc.stdin as NodeJS.WritableStream | null)?.end();
 			setCopied(true);
