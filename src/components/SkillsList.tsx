@@ -43,7 +43,9 @@ export function SkillsList({
 			title=" Skills (Space to select) "
 		>
 			{loadingSkills ? (
-				<text fg={theme.overlay1}>Loading skills...</text>
+				<box flexGrow={1} justifyContent="center" alignItems="center">
+					<text fg={theme.overlay1}>Loading...</text>
+				</box>
 			) : filteredSkills.length > 0 ? (
 				<>
 					{hasPrevious && (
