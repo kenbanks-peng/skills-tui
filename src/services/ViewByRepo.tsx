@@ -18,20 +18,17 @@ import { addSkill, removeSkill } from "#lib/skills-cli";
 import { theme } from "#lib/theme";
 import { isFileRepo, repoDisplayName, viewportHeight } from "#lib/utils";
 
-// Module-level cache so skills survive across component remounts.
-const skillsCache = new Map<string, string[]>();
+// Module-level in-flight dedup so concurrent callers share one promise per repo.
 const inflightCache = new Map<string, Promise<string[]>>();
 
 function fetchRepoSkills(repo: RepoSource): Promise<string[]> {
-	const resolved = skillsCache.get(repo);
-	if (resolved) return Promise.resolve(resolved);
 	const inflight = inflightCache.get(repo);
 	if (inflight) return inflight;
 	const promise = (async () => {
 		const skills = isFileRepo(repo)
 			? listLocalSkills(repo)
 			: await loadSkillsFromRepo(repo);
-		skillsCache.set(repo, skills);
+		inflightCache.delete(repo);
 		return skills;
 	})();
 	inflightCache.set(repo, promise);
@@ -67,10 +64,10 @@ export function ViewByRepo({
 	const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
 	const [loadingSkills, setLoadingSkills] = useState(false);
 	const [allRepoSkills, setAllRepoSkills] = useState<Map<string, string[]>>(
-		() => new Map(skillsCache),
+		new Map(),
 	);
 
-	// Preload skills for all repos (for search filtering)
+	// Preload all repos in the background (for search filtering).
 	useEffect(() => {
 		for (const repo of repos) {
 			fetchRepoSkills(repo).then((skills) => {
@@ -129,39 +126,35 @@ export function ViewByRepo({
 		if (!selectedRepo) return;
 		skillsList.reset();
 
-		const applySkills = (skills: string[], installed: Set<string>) => {
-			const onDisk = getSkillsOnDisk(skills, isGlobal);
-			for (const s of onDisk) installed.add(s);
-			setAvailableSkills(skills);
-			setSelectedSkills(installed);
-			setLoadingSkills(false);
-		};
-
 		if (isFileRepo(selectedRepo)) {
 			const skills = listLocalSkills(selectedRepo);
 			const installed = getInstalledLocalSkills(selectedRepo, isGlobal);
 			setAllRepoSkills((prev) => new Map(prev).set(selectedRepo, skills));
-			applySkills(skills, installed);
+			setAvailableSkills(skills);
+			setSelectedSkills(installed);
+			setLoadingSkills(false);
 			return;
 		}
 
-		const cached = skillsCache.get(selectedRepo);
-		if (cached) {
-			loadInstalledSkills(selectedRepo, isGlobal).then((installed) => {
-				applySkills(cached, installed);
-			});
-		} else {
-			setLoadingSkills(true);
-			setAvailableSkills([]);
-			setSelectedSkills(new Set());
-			Promise.all([
-				fetchRepoSkills(selectedRepo),
-				loadInstalledSkills(selectedRepo, isGlobal),
-			]).then(([skills, installed]) => {
-				setAllRepoSkills((prev) => new Map(prev).set(selectedRepo, skills));
-				applySkills(skills, installed);
-			});
-		}
+		// loadSkillsFromRepo reads from disk cache (~/.cache/skills-tui/)
+		// and resolves fast on cache hit. Only show "Loading..." if the
+		// fetch takes long enough to indicate a real network call.
+		setAvailableSkills([]);
+		setSelectedSkills(new Set());
+		const timer = setTimeout(() => setLoadingSkills(true), 50);
+
+		Promise.all([
+			fetchRepoSkills(selectedRepo),
+			loadInstalledSkills(selectedRepo, isGlobal),
+		]).then(([skills, installed]) => {
+			clearTimeout(timer);
+			const onDisk = getSkillsOnDisk(skills, isGlobal);
+			for (const s of onDisk) installed.add(s);
+			setAllRepoSkills((prev) => new Map(prev).set(selectedRepo, skills));
+			setAvailableSkills(skills);
+			setSelectedSkills(installed);
+			setLoadingSkills(false);
+		});
 	}, [selectedRepo, isGlobal, skillsList.reset]);
 
 	const runAction = (
