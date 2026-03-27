@@ -17,6 +17,7 @@ import { fileUrlToPath, stripAnsi } from "#lib/utils";
 // Installed skill info: skill name -> set of agent names
 export interface InstalledSkillInfo {
 	name: string;
+	path: string;
 	agents: Set<string>;
 }
 
@@ -61,6 +62,32 @@ export async function loadInstalledSkills(
 	}
 }
 
+// Check which skills from a list exist on disk in .agents/skills/.
+// This catches skills installed by other agents that share the universal path.
+export function getSkillsOnDisk(
+	skillNames: string[],
+	isGlobal: boolean,
+): Set<string> {
+	const baseDir = agentsSkillsDir(isGlobal);
+	const onDisk = new Set<string>();
+	for (const name of skillNames) {
+		if (existsSync(join(baseDir, name))) {
+			onDisk.add(name);
+		}
+	}
+	return onDisk;
+}
+
+// Remove a skill directory from .agents/skills/ if it exists on disk.
+// Used when the skills CLI doesn't fully clean up the shared path.
+export function removeSkillFromDisk(
+	skillName: string,
+	isGlobal: boolean,
+): void {
+	const dest = join(agentsSkillsDir(isGlobal), skillName);
+	if (existsSync(dest)) rmSync(dest, { recursive: true });
+}
+
 // Parse `skills list` output into structured data
 export async function parseInstalledSkills(
 	isGlobal: boolean,
@@ -75,13 +102,15 @@ export async function parseInstalledSkills(
 
 		const skills: InstalledSkillInfo[] = [];
 		let currentSkill: string | null = null;
+		let currentPath = "";
 
 		for (const line of lines) {
 			const trimmed = line.trim();
 			// Skill name line: starts with skill name followed by path (e.g. "brainstorming ~/.agents/skills/brainstorming")
-			const skillMatch = trimmed.match(/^([a-z0-9_-]+)\s+~/);
+			const skillMatch = trimmed.match(/^([a-z0-9_-]+)\s+(~?\S+)/);
 			if (skillMatch) {
 				currentSkill = skillMatch[1];
+				currentPath = skillMatch[2];
 				continue;
 			}
 			// Agents line: "Agents: Claude Code, Pi" or "Agents: not linked"
@@ -93,8 +122,13 @@ export async function parseInstalledSkills(
 						agentSet.add(a.trim());
 					}
 				}
-				skills.push({ name: currentSkill, agents: agentSet });
+				skills.push({
+					name: currentSkill,
+					path: currentPath,
+					agents: agentSet,
+				});
 				currentSkill = null;
+				currentPath = "";
 			}
 		}
 
@@ -245,6 +279,41 @@ export function getInstalledLocalSkills(
 	return installed;
 }
 
+// Ensure absolute symlinks from each non-universal agent's skill path to .agents/skills/<skill>.
+// The skills CLI may create relative symlinks which break across directory structures.
+export function ensureAgentSymlinks(
+	skillName: string,
+	isGlobal: boolean,
+	agents: AgentConfig[],
+	selectedAgents: Set<string>,
+): void {
+	const baseDir = agentsSkillsDir(isGlobal);
+	const destDir = join(baseDir, skillName);
+	if (!existsSync(destDir)) return;
+
+	for (const agent of agents) {
+		if (!selectedAgents.has(agent.name)) continue;
+		const agentPath = isGlobal ? agent.global : agent.local;
+		// Skip agents that already use the standard .agents/skills/ path
+		if (agentPath === ".agents/skills/" || agentPath === "~/.agents/skills/")
+			continue;
+		const agentSkillsDir = expandHome(
+			isGlobal ? agentPath : join(process.cwd(), agentPath),
+		);
+		const agentSkillDir = join(agentSkillsDir, skillName);
+		mkdirSync(agentSkillsDir, { recursive: true });
+		// Use lstatSync to detect broken symlinks (existsSync follows symlinks
+		// and returns false for broken ones, leaving them in place).
+		try {
+			lstatSync(agentSkillDir);
+			rmSync(agentSkillDir, { recursive: true });
+		} catch {
+			/* doesn't exist */
+		}
+		symlinkSync(resolve(destDir), agentSkillDir);
+	}
+}
+
 // Install a skill from a file:// repo: copy into .agents/skills/ and symlink to agent paths
 export function installLocalSkill(
 	repoUrl: string,
@@ -262,21 +331,7 @@ export function installLocalSkill(
 	if (existsSync(destDir)) rmSync(destDir, { recursive: true });
 	cpSync(srcDir, destDir, { recursive: true });
 
-	// Symlink into each selected non-universal agent's path
-	for (const agent of agents) {
-		if (!selectedAgents.has(agent.name)) continue;
-		const agentPath = isGlobal ? agent.global : agent.local;
-		// Skip agents that already use the standard .agents/skills/ path
-		if (agentPath === ".agents/skills/" || agentPath === "~/.agents/skills/")
-			continue;
-		const agentSkillsDir = expandHome(
-			isGlobal ? agentPath : join(process.cwd(), agentPath),
-		);
-		const agentSkillDir = join(agentSkillsDir, skillName);
-		mkdirSync(agentSkillsDir, { recursive: true });
-		if (existsSync(agentSkillDir)) rmSync(agentSkillDir, { recursive: true });
-		symlinkSync(resolve(destDir), agentSkillDir);
-	}
+	ensureAgentSymlinks(skillName, isGlobal, agents, selectedAgents);
 }
 
 // Remove a skill installed from a file:// repo

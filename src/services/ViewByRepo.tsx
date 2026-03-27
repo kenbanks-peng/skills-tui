@@ -4,12 +4,15 @@ import { SkillsList } from "#components/SkillsList";
 import { useScrollableList } from "#hooks/useScrollableList";
 import type { AgentConfig, RepoSource } from "#lib/config";
 import {
+	ensureAgentSymlinks,
 	getInstalledLocalSkills,
+	getSkillsOnDisk,
 	installLocalSkill,
 	listLocalSkills,
 	loadInstalledSkills,
 	loadSkillsFromRepo,
 	removeLocalSkill,
+	removeSkillFromDisk,
 } from "#lib/skills";
 import { addSkill, removeSkill } from "#lib/skills-cli";
 import { theme } from "#lib/theme";
@@ -125,6 +128,10 @@ export function ViewByRepo({
 					loadSkillsFromRepo(selectedRepo),
 					loadInstalledSkills(selectedRepo, isGlobal),
 				]).then(([skills, installed]) => {
+					// Also mark skills that exist on disk (e.g. installed by
+					// another agent that shares the .agents/skills/ path).
+					const onDisk = getSkillsOnDisk(skills, isGlobal);
+					for (const s of onDisk) installed.add(s);
 					setAvailableSkills(skills);
 					setSelectedSkills(installed);
 					setLoadingSkills(false);
@@ -147,6 +154,15 @@ export function ViewByRepo({
 						`ERROR while ${action === "add" ? "installing" : "removing"} ${label}`,
 					);
 				} else {
+					if (action === "remove" && skill) {
+						// The CLI may not remove from the shared .agents/skills/ path
+						// if the skill was installed by a different agent.
+						removeSkillFromDisk(skill, isGlobal);
+					} else if (action === "add" && skill) {
+						// The CLI may create relative symlinks for agent paths;
+						// replace them with absolute symlinks.
+						ensureAgentSymlinks(skill, isGlobal, agents, selectedAgents);
+					}
 					onInstallComplete();
 				}
 			})

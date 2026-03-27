@@ -81,28 +81,17 @@ export function ViewBySkill({
 	const isUniversalGlobalAgent = (name: string) =>
 		universalAgents.both.has(name);
 
-	const universalDisplayNames = new Set(
-		visibleAgents.filter((a) => isUniversalAgent(a.name)).map((a) => a.display),
-	);
-	const universalGlobalDisplayNames = new Set(
-		visibleAgents
-			.filter((a) => isUniversalGlobalAgent(a.name))
-			.map((a) => a.display),
-	);
-
 	// Check if an agent has a skill linked (directly or via shared universal path)
 	const isLinked = (skill: InstalledSkillInfo, agent: AgentConfig): boolean => {
 		if (skill.agents.has(agent.display)) return true;
 
-		// Universal agents share installed skills through .agents/skills paths
+		// Universal agents read directly from .agents/skills paths,
+		// so any skill located there is visible to them regardless of
+		// which agent name the CLI reports.
 		if (isGlobal && isUniversalGlobalAgent(agent.name)) {
-			for (const name of universalGlobalDisplayNames) {
-				if (skill.agents.has(name)) return true;
-			}
+			if (skill.path.startsWith("~/.agents/skills")) return true;
 		} else if (!isGlobal && isUniversalAgent(agent.name)) {
-			for (const name of universalDisplayNames) {
-				if (skill.agents.has(name)) return true;
-			}
+			if (skill.path.startsWith(".agents/skills")) return true;
 		}
 		return false;
 	};
