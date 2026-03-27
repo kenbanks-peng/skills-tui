@@ -21,13 +21,16 @@ import { isFileRepo, repoDisplayName, viewportHeight } from "#lib/utils";
 // Module-level in-flight dedup so concurrent callers share one promise per repo.
 const inflightCache = new Map<string, Promise<string[]>>();
 
-function fetchRepoSkills(repo: RepoSource): Promise<string[]> {
+function fetchRepoSkills(
+	repo: RepoSource,
+	cacheExpiryMs: number,
+): Promise<string[]> {
 	const inflight = inflightCache.get(repo);
 	if (inflight) return inflight;
 	const promise = (async () => {
 		const skills = isFileRepo(repo)
 			? listLocalSkills(repo)
-			: await loadSkillsFromRepo(repo);
+			: await loadSkillsFromRepo(repo, cacheExpiryMs);
 		inflightCache.delete(repo);
 		return skills;
 	})();
@@ -41,6 +44,7 @@ interface ViewByRepoProps {
 	isGlobal: boolean;
 	agents: AgentConfig[];
 	selectedAgents: Set<string>;
+	cacheExpiryMs: number;
 	onFocusSkills: () => void;
 	onInstallComplete: () => void;
 	onError: (msg: string) => void;
@@ -53,6 +57,7 @@ export function ViewByRepo({
 	isGlobal,
 	agents,
 	selectedAgents,
+	cacheExpiryMs,
 	onFocusSkills,
 	onInstallComplete,
 	onError,
@@ -70,14 +75,14 @@ export function ViewByRepo({
 	// Preload all repos in the background (for search filtering).
 	useEffect(() => {
 		for (const repo of repos) {
-			fetchRepoSkills(repo).then((skills) => {
+			fetchRepoSkills(repo, cacheExpiryMs).then((skills) => {
 				setAllRepoSkills((prev) => {
 					if (prev.get(repo) === skills) return prev;
 					return new Map(prev).set(repo, skills);
 				});
 			});
 		}
-	}, [repos]);
+	}, [repos, cacheExpiryMs]);
 
 	// Filter repos based on search
 	const lowerFilter = searchFilter.toLowerCase();
@@ -144,7 +149,7 @@ export function ViewByRepo({
 		const timer = setTimeout(() => setLoadingSkills(true), 50);
 
 		Promise.all([
-			fetchRepoSkills(selectedRepo),
+			fetchRepoSkills(selectedRepo, cacheExpiryMs),
 			loadInstalledSkills(selectedRepo, isGlobal),
 		]).then(([skills, installed]) => {
 			clearTimeout(timer);
@@ -155,7 +160,7 @@ export function ViewByRepo({
 			setSelectedSkills(installed);
 			setLoadingSkills(false);
 		});
-	}, [selectedRepo, isGlobal, skillsList.reset]);
+	}, [selectedRepo, isGlobal, cacheExpiryMs, skillsList.reset]);
 
 	const runAction = (
 		action: "add" | "remove",

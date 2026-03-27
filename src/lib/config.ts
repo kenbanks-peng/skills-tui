@@ -95,6 +95,9 @@ enabled = [
   # "zencoder",
 ]
 
+# Cache expiry in hours (default: 24). Repo skill lists are re-fetched after this period.
+# cache_expiry_hours = 24
+
 # Agents that discover skills from the standard .agents/skills paths.
 # These agents will see any skill installed by the skills CLI.
 # "both" = reads .agents/skills (local) and ~/.agents/skills (global)
@@ -210,6 +213,23 @@ export async function loadUniversalAgents(): Promise<UniversalAgents> {
 		};
 	} catch {
 		return empty;
+	}
+}
+
+// Load cache expiry duration in milliseconds from config.toml (default: 24 hours)
+export async function loadCacheExpiryMs(): Promise<number> {
+	const defaultMs = 24 * 60 * 60 * 1000;
+	try {
+		const text = await readTextFile(configPath);
+		if (text === null) return defaultMs;
+		const config = parseToml(text) as Record<string, unknown>;
+		const hours = config?.cache_expiry_hours;
+		if (typeof hours === "number" && hours > 0) {
+			return hours * 60 * 60 * 1000;
+		}
+		return defaultMs;
+	} catch {
+		return defaultMs;
 	}
 }
 

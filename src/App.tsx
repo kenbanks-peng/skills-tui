@@ -12,6 +12,7 @@ import { SettingsPanel } from "#components/SettingsPanel";
 import {
 	type AgentConfig,
 	loadAgents,
+	loadCacheExpiryMs,
 	loadDisabledAgents,
 	loadRepos,
 	loadUniversalAgents,
@@ -19,6 +20,7 @@ import {
 	saveDisabledAgents,
 	type UniversalAgents,
 } from "#lib/config";
+import { pruneCache } from "#lib/skills";
 import { checkArgs, updateArgs } from "#lib/skills-cli";
 import { theme } from "#lib/theme";
 import { CommandService } from "#services/CommandService";
@@ -54,6 +56,7 @@ export function App() {
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [searchFilter, setSearchFilter] = useState("");
+	const [cacheExpiryMs, setCacheExpiryMs] = useState(24 * 60 * 60 * 1000);
 
 	// Load repos, agents, universal config, and disabled state on mount
 	useEffect(() => {
@@ -67,7 +70,13 @@ export function App() {
 				);
 			},
 		);
-		loadRepos().then(setRepos);
+		Promise.all([loadRepos(), loadCacheExpiryMs()]).then(
+			([repoList, expiryMs]) => {
+				setCacheExpiryMs(expiryMs);
+				setRepos(repoList);
+				pruneCache(repoList, expiryMs);
+			},
+		);
 		loadUniversalAgents().then(setUniversalAgents);
 	}, []);
 
@@ -296,6 +305,7 @@ export function App() {
 								isGlobal={isGlobal}
 								agents={agents}
 								selectedAgents={selectedAgents}
+								cacheExpiryMs={cacheExpiryMs}
 								onFocusSkills={() => setFocusedColumn("content2")}
 								onInstallComplete={() => setRefreshKey((k) => k + 1)}
 								onError={(msg) => {

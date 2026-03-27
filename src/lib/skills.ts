@@ -3,13 +3,15 @@ import {
 	lstatSync,
 	mkdirSync,
 	readdirSync,
+	readFileSync,
 	rmSync,
 	symlinkSync,
+	unlinkSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { existsSync, readTextFile, writeTextFile } from "#lib/compat";
-import type { AgentConfig } from "#lib/config";
+import type { AgentConfig, RepoSource } from "#lib/config";
 import { cacheDir } from "#lib/config";
 import { listRepoSkills, listSkills } from "#lib/skills-cli";
 import { fileUrlToPath, stripAnsi } from "#lib/utils";
@@ -138,60 +140,51 @@ export async function parseInstalledSkills(
 	}
 }
 
-// Cache types
-interface SkillCache {
-	[repo: string]: {
-		skills: string[];
-		timestamp: number;
-	};
+// Per-repo cache entry
+interface RepoCacheEntry {
+	skills: string[];
+	timestamp: number;
 }
 
-// Get cache file path
-function getCachePath(): string {
-	return join(cacheDir, "skills-cache.json");
+// Convert a repo identifier to a safe filename
+function repoCacheFile(repo: string): string {
+	const safe = repo.replace(/[^a-zA-Z0-9_-]/g, "_");
+	return join(cacheDir, `repo_${safe}.json`);
 }
 
-// Read cache from disk
-async function readCache(): Promise<SkillCache> {
+// Read a single repo's cache from disk
+async function readRepoCache(repo: string): Promise<RepoCacheEntry | null> {
 	try {
-		const cachePath = getCachePath();
-		const text = await readTextFile(cachePath);
-		if (text === null) {
-			return {};
-		}
+		const text = await readTextFile(repoCacheFile(repo));
+		if (text === null) return null;
 		return JSON.parse(text);
-	} catch (err) {
-		console.error("Failed to read cache:", err);
-		return {};
+	} catch {
+		return null;
 	}
 }
 
-// Write cache to disk
-async function writeCache(cache: SkillCache): Promise<void> {
+// Write a single repo's cache to disk
+async function writeRepoCache(
+	repo: string,
+	entry: RepoCacheEntry,
+): Promise<void> {
 	try {
-		const cachePath = getCachePath();
-		await writeTextFile(cachePath, JSON.stringify(cache, null, 2));
-	} catch (err) {
-		console.error("Failed to write cache:", err);
+		await writeTextFile(repoCacheFile(repo), JSON.stringify(entry));
+	} catch {
+		/* best effort */
 	}
 }
 
-// Check if cache entry is older than 24 hours
-function isCacheStale(timestamp: number): boolean {
-	const now = Date.now();
-	const twentyFourHours = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-	return now - timestamp > twentyFourHours;
-}
-
-// Load available skills from a repository (with caching)
-export async function loadSkillsFromRepo(repo: string): Promise<string[]> {
+// Load available skills from a repository (with per-repo caching)
+export async function loadSkillsFromRepo(
+	repo: string,
+	cacheExpiryMs: number,
+): Promise<string[]> {
 	try {
 		// Check cache first
-		const cache = await readCache();
-		const cached = cache[repo];
+		const cached = await readRepoCache(repo);
 
-		// Return cached data if it exists and is less than 24 hours old
-		if (cached && !isCacheStale(cached.timestamp)) {
+		if (cached && Date.now() - cached.timestamp <= cacheExpiryMs) {
 			return cached.skills;
 		}
 
@@ -222,17 +215,42 @@ export async function loadSkillsFromRepo(repo: string): Promise<string[]> {
 			}
 		}
 
-		// Update cache
-		cache[repo] = {
-			skills,
-			timestamp: Date.now(),
-		};
-		await writeCache(cache);
+		// Write per-repo cache file (no shared state, no race)
+		await writeRepoCache(repo, { skills, timestamp: Date.now() });
 
 		return skills;
 	} catch (err) {
 		console.error("Failed to load skills:", err);
 		return [];
+	}
+}
+
+// Remove cache files for repos not in the current list and stale entries.
+export function pruneCache(repos: RepoSource[], cacheExpiryMs: number): void {
+	const validFiles = new Set(repos.map((r) => repoCacheFile(r)));
+	try {
+		const entries = readdirSync(cacheDir, { withFileTypes: true });
+		for (const entry of entries) {
+			if (!entry.isFile() || !entry.name.startsWith("repo_")) continue;
+			const filePath = join(cacheDir, entry.name);
+			// Remove if repo no longer in list
+			if (!validFiles.has(filePath)) {
+				unlinkSync(filePath);
+				continue;
+			}
+			// Remove if stale
+			try {
+				const raw = readFileSync(filePath, "utf-8");
+				const data: RepoCacheEntry = JSON.parse(raw);
+				if (Date.now() - data.timestamp > cacheExpiryMs) {
+					unlinkSync(filePath);
+				}
+			} catch {
+				unlinkSync(filePath);
+			}
+		}
+	} catch {
+		/* cache dir may not exist yet */
 	}
 }
 
