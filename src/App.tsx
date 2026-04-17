@@ -330,7 +330,7 @@ export function App() {
 						{selectedServiceId === ServiceId.CHECK && (
 							<CommandService
 								focused={contentFocus}
-								argsBuilder={() => checkArgs(isGlobal, selectedAgents)}
+								argsBuilder={() => checkArgs(isGlobal)}
 								onBack={() => setFocusedColumn("services")}
 							/>
 						)}
@@ -338,7 +338,7 @@ export function App() {
 						{selectedServiceId === ServiceId.UPDATE && (
 							<CommandService
 								focused={contentFocus}
-								argsBuilder={() => updateArgs(isGlobal, selectedAgents)}
+								argsBuilder={() => updateArgs(isGlobal)}
 								onBack={() => setFocusedColumn("services")}
 							/>
 						)}

@@ -78,23 +78,15 @@ export async function removeSkill(
 
 // --- Args for CommandOutput (streaming needed) ---
 
-export function checkArgs(
-	isGlobal: boolean,
-	agents: Iterable<string>,
-): string[] {
+export function checkArgs(isGlobal: boolean): string[] {
 	const args = base("check");
 	if (isGlobal) args.push("-g");
-	args.push("--agent", ...ensureOpencode(agents));
 	return args;
 }
 
-export function updateArgs(
-	isGlobal: boolean,
-	agents: Iterable<string>,
-): string[] {
+export function updateArgs(isGlobal: boolean): string[] {
 	const args = base("update");
 	if (isGlobal) args.push("-g");
-	args.push("--agent", ...ensureOpencode(agents));
 	args.push("-y");
 	return args;
 }
