@@ -14,13 +14,32 @@ import { existsSync, readTextFile, writeTextFile } from "#lib/compat";
 import type { AgentConfig, RepoSource } from "#lib/config";
 import { cacheDir } from "#lib/config";
 import { listRepoSkills, listSkills } from "#lib/skills-cli";
-import { fileUrlToPath, stripAnsi } from "#lib/utils";
+import {
+	fileUrlToPath,
+	isFileRepo,
+	repoDisplayName,
+	stripAnsi,
+} from "#lib/utils";
 
 // Installed skill info: skill name -> set of agent names
 export interface InstalledSkillInfo {
 	name: string;
 	path: string;
 	agents: Set<string>;
+}
+
+function normalizeRepoSource(repo: string): string {
+	return repo
+		.replace(/^https:\/\/github\.com\//, "")
+		.replace(/\.git\/?$/, "")
+		.replace(/\/$/, "");
+}
+
+function repoMatchesLockSource(repo: string, source?: string, sourceUrl?: string) {
+	const normalizedRepo = normalizeRepoSource(repo);
+	return [source, sourceUrl]
+		.filter((value): value is string => Boolean(value))
+		.some((value) => normalizeRepoSource(value) === normalizedRepo);
 }
 
 // Load installed skill names for a given repo from the lock file,
@@ -30,8 +49,10 @@ export async function loadInstalledSkills(
 	isGlobal: boolean,
 ): Promise<Set<string>> {
 	try {
+		const xdgStateHome =
+			process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state");
 		const lockPaths = isGlobal
-			? [join(homedir(), ".local", "state", "skills", ".skill-lock.json")]
+			? [join(xdgStateHome, "skills", ".skill-lock.json")]
 			: ["skills-lock.json"];
 		const baseDir = agentsSkillsDir(isGlobal);
 		const installed = new Set<string>();
@@ -43,14 +64,14 @@ export async function loadInstalledSkills(
 			let pruned = false;
 			for (const [skillName, info] of Object.entries(data.skills) as [
 				string,
-				{ source?: string },
+				{ source?: string; sourceUrl?: string },
 			][]) {
 				if (!existsSync(join(baseDir, skillName))) {
 					delete data.skills[skillName];
 					pruned = true;
 					continue;
 				}
-				if (info.source === repo) {
+				if (repoMatchesLockSource(repo, info.source, info.sourceUrl)) {
 					installed.add(skillName);
 				}
 			}
@@ -179,10 +200,11 @@ async function writeRepoCache(
 export async function loadSkillsFromRepo(
 	repo: string,
 	cacheExpiryMs: number,
+	options: { forceRefresh?: boolean } = {},
 ): Promise<string[]> {
 	try {
 		// Check cache first
-		const cached = await readRepoCache(repo);
+		const cached = options.forceRefresh ? null : await readRepoCache(repo);
 
 		if (cached && Date.now() - cached.timestamp <= cacheExpiryMs) {
 			return cached.skills;
@@ -223,6 +245,80 @@ export async function loadSkillsFromRepo(
 		console.error("Failed to load skills:", err);
 		return [];
 	}
+}
+
+export interface RepoNewSkillsInfo {
+	repo: RepoSource;
+	newSkills: string[];
+}
+
+// Check configured repos that already have at least one installed skill and
+// report skills that exist upstream but are not installed locally/globally.
+// The skills CLI's check/update commands only compare lock-tracked skill hashes;
+// they intentionally do not report newly added skills in the same repo.
+export async function findNewSkillsInTrackedRepos(
+	repos: RepoSource[],
+	isGlobal: boolean,
+	cacheExpiryMs: number,
+): Promise<RepoNewSkillsInfo[]> {
+	const results: RepoNewSkillsInfo[] = [];
+
+	for (const repo of repos) {
+		const installed = isFileRepo(repo)
+			? getInstalledLocalSkills(repo, isGlobal)
+			: await loadInstalledSkills(repo, isGlobal);
+
+		// Avoid reporting every skill from every configured repo. Only repos with at
+		// least one installed skill are relevant to Check/Update.
+		if (installed.size === 0) continue;
+
+		const skills = isFileRepo(repo)
+			? listLocalSkills(repo)
+			: await loadSkillsFromRepo(repo, cacheExpiryMs, { forceRefresh: true });
+
+		// Treat matching skill directories on disk as installed even if they are not
+		// represented in the skills CLI lock file (for example symlinked/shared skills).
+		for (const skill of getSkillsOnDisk(skills, isGlobal)) {
+			installed.add(skill);
+		}
+
+		const newSkills = skills.filter((skill) => !installed.has(skill));
+		if (newSkills.length > 0) {
+			results.push({ repo, newSkills });
+		}
+	}
+
+	return results;
+}
+
+export async function formatNewSkillsSummary(
+	repos: RepoSource[],
+	isGlobal: boolean,
+	cacheExpiryMs: number,
+): Promise<string> {
+	const infos = await findNewSkillsInTrackedRepos(repos, isGlobal, cacheExpiryMs);
+	if (infos.length === 0) {
+		return "\n✓ No new skills found in installed repositories.\n";
+	}
+
+	const lines = ["", "New skills available in installed repositories:"];
+	for (const info of infos) {
+		lines.push(`\n${repoDisplayName(info.repo)} (${info.newSkills.length})`);
+		for (const skill of info.newSkills) {
+			lines.push(`  • ${skill}`);
+		}
+	}
+	lines.push("", "Install them from View by Repo, or run:");
+	for (const info of infos) {
+		for (const skill of info.newSkills) {
+			const globalFlag = isGlobal ? " -g" : "";
+			lines.push(
+				`  npx skills add ${info.repo} --skill ${skill}${globalFlag} -y`,
+			);
+		}
+	}
+	lines.push("");
+	return `${lines.join("\n")}\n`;
 }
 
 // Remove cache files for repos not in the current list and stale entries.

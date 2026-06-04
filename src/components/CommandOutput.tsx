@@ -23,9 +23,15 @@ interface CommandOutputProps {
 	args: string[] | null;
 	focused: boolean;
 	onBack: () => void;
+	afterCommand?: () => Promise<string>;
 }
 
-export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
+export function CommandOutput({
+	args,
+	focused,
+	onBack,
+	afterCommand,
+}: CommandOutputProps) {
 	useTerminalDimensions();
 	const [isRunning, setIsRunning] = useState(false);
 	const [exitCode, setExitCode] = useState<number | null>(null);
@@ -109,6 +115,20 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 
 				// Wait for process to exit
 				const code = await proc.exited;
+				if (afterCommand) {
+					try {
+						const extraOutput = await afterCommand();
+						if (extraOutput) {
+							setOutput((prev) => prev + extraOutput);
+							setHasOutput(true);
+						}
+					} catch (err) {
+						setOutput(
+							(prev) => `${prev}\nCould not check repository skill additions: ${err}\n`,
+						);
+						setHasOutput(true);
+					}
+				}
 				setExitCode(code);
 				setIsRunning(false);
 				procRef.current = null;
@@ -129,7 +149,7 @@ export function CommandOutput({ args, focused, onBack }: CommandOutputProps) {
 				procRef.current.kill();
 			}
 		};
-	}, [args]);
+	}, [args, afterCommand]);
 
 	const cleanOutput = stripAnsi(output);
 

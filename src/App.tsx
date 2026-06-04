@@ -20,7 +20,7 @@ import {
 	saveDisabledAgents,
 	type UniversalAgents,
 } from "#lib/config";
-import { pruneCache } from "#lib/skills";
+import { formatNewSkillsSummary, pruneCache } from "#lib/skills";
 import { checkArgs, updateArgs } from "#lib/skills-cli";
 import { theme } from "#lib/theme";
 import { CommandService } from "#services/CommandService";
@@ -331,6 +331,8 @@ export function App() {
 							<CommandService
 								focused={contentFocus}
 								argsBuilder={() => checkArgs(isGlobal)}
+								afterCommandBuilder={() => () =>
+									formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs)}
 								onBack={() => setFocusedColumn("services")}
 							/>
 						)}
@@ -339,6 +341,8 @@ export function App() {
 							<CommandService
 								focused={contentFocus}
 								argsBuilder={() => updateArgs(isGlobal)}
+								afterCommandBuilder={() => () =>
+									formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs)}
 								onBack={() => setFocusedColumn("services")}
 							/>
 						)}
