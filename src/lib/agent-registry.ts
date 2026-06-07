@@ -89,6 +89,12 @@ const registry: RegistryEntry[] = [
 		global: "~/.config/goose/skills/",
 	},
 	{
+		name: "hermes-agent",
+		display: "Hermes Agent",
+		local: ".hermes/skills/",
+		global: "~/.hermes/skills/",
+	},
+	{
 		name: "iflow-cli",
 		display: "iFlow CLI",
 		local: ".iflow/skills/",

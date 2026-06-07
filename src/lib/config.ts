@@ -57,6 +57,7 @@ enabled = [
   "codex",
   "cursor",
   "gemini-cli",
+  "hermes-agent",
   "opencode",
   "pi",
   # "adal",
