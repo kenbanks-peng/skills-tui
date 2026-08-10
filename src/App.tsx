@@ -20,11 +20,10 @@ import {
 	saveDisabledAgents,
 	type UniversalAgents,
 } from "#lib/config";
-import { formatNewSkillsSummary, pruneCache } from "#lib/skills";
-import { checkArgs, updateArgs } from "#lib/skills-cli";
+import { pruneCache } from "#lib/skills";
 import { theme } from "#lib/theme";
-import { CommandService } from "#services/CommandService";
 import { Find } from "#services/Find";
+import { Updates } from "#services/Updates";
 import { ServiceId, services } from "#services/index";
 import { ViewByRepo } from "#services/ViewByRepo";
 import { ViewBySkill } from "#services/ViewBySkill";
@@ -170,12 +169,7 @@ export function App() {
 			return;
 
 		// Output panels handle escape themselves
-		if (
-			focusedColumn === "content" &&
-			(selectedServiceId === ServiceId.CHECK ||
-				selectedServiceId === ServiceId.UPDATE)
-		) {
-			if (key.name === "escape") renderer.destroy();
+		if (focusedColumn === "content" && selectedServiceId === ServiceId.UPDATE) {
 			return;
 		}
 		if (focusedColumn === "content2" && selectedServiceId === ServiceId.FIND) {
@@ -327,22 +321,12 @@ export function App() {
 							/>
 						)}
 
-						{selectedServiceId === ServiceId.CHECK && (
-							<CommandService
-								focused={contentFocus}
-								argsBuilder={() => checkArgs(isGlobal)}
-								afterCommandBuilder={() => () =>
-									formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs)}
-								onBack={() => setFocusedColumn("services")}
-							/>
-						)}
-
 						{selectedServiceId === ServiceId.UPDATE && (
-							<CommandService
+							<Updates
 								focused={contentFocus}
-								argsBuilder={() => updateArgs(isGlobal)}
-								afterCommandBuilder={() => () =>
-									formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs)}
+								repos={repos}
+								isGlobal={isGlobal}
+								cacheExpiryMs={cacheExpiryMs}
 								onBack={() => setFocusedColumn("services")}
 							/>
 						)}

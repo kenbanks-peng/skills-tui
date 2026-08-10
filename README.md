@@ -11,7 +11,7 @@ Browse skill repositories, install/remove skills, check for updates, and control
 - **Browse by repo** — explore skills from configured repositories (GitHub, remote URL, or local `file://` path)
 - **Browse by skill** — see all installed skills and which agents they're linked to
 - **Find** — search for skills across repos
-- **Check & Update** — check for and apply skill updates
+- **Updates** — check for skill updates first, then apply them explicitly
 - **Multi-agent support** — install skills to any combination of agents at once
 - **Global & local** — toggle between global (`~/.agents/skills/`) and project-local (`.agents/skills/`) installs
 - **Filter** — type-ahead filtering when browsing skills

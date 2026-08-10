@@ -2,8 +2,7 @@ export const ServiceId = {
 	VIEW_BY_REPO: 0,
 	VIEW_BY_SKILL: 1,
 	FIND: 2,
-	CHECK: 3,
-	UPDATE: 4,
+	UPDATE: 3,
 } as const;
 export type ServiceId = (typeof ServiceId)[keyof typeof ServiceId];
 
@@ -25,6 +24,9 @@ export const services: Service[] = [
 		description: "List installed skills",
 	},
 	{ id: ServiceId.FIND, name: "Find", description: "Search for skills" },
-	{ id: ServiceId.CHECK, name: "Check", description: "Check for updates" },
-	{ id: ServiceId.UPDATE, name: "Update", description: "Update skills" },
+	{
+		id: ServiceId.UPDATE,
+		name: "Updates",
+		description: "Check and apply skill updates",
+	},
 ];
