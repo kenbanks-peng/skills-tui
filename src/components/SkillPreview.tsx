@@ -3,6 +3,7 @@ import { theme } from "#lib/theme";
 import { truncateText } from "#lib/utils";
 
 interface SkillPreviewProps {
+	width: number;
 	skillName: string | null;
 	path: string | null;
 	content: string | null;
@@ -52,6 +53,7 @@ function sectionSnippet(content: string, heading: string): string | null {
 }
 
 export function SkillPreview({
+	width,
 	skillName,
 	path,
 	content,
@@ -63,8 +65,7 @@ export function SkillPreview({
 	return (
 		<box
 			flexDirection="column"
-			width={38}
-			flexGrow={1}
+			width={width}
 			border
 			borderStyle="rounded"
 			borderColor={theme.surface2}

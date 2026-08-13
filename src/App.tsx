@@ -190,6 +190,21 @@ export function App() {
 
 	const col1Width = 28;
 	const minWidth = 80;
+	// Keep all three repository panels visible. Their previous fixed widths
+	// required 148 columns and caused Preview to be clipped on narrower screens.
+	const repositoryAreaWidth = width - col1Width - 2;
+	const repoPanelWidth = Math.min(
+		40,
+		Math.max(16, Math.floor(repositoryAreaWidth * 0.34)),
+	);
+	const skillsPanelWidth = Math.min(
+		40,
+		Math.max(16, Math.floor(repositoryAreaWidth * 0.33)),
+	);
+	const previewPanelWidth = Math.max(
+		16,
+		repositoryAreaWidth - repoPanelWidth - skillsPanelWidth,
+	);
 	const minHeight = 20;
 
 	if (width < minWidth || height < minHeight) {
@@ -300,6 +315,9 @@ export function App() {
 								agents={agents}
 								selectedAgents={selectedAgents}
 								cacheExpiryMs={cacheExpiryMs}
+								repoPanelWidth={repoPanelWidth}
+								skillsPanelWidth={skillsPanelWidth}
+								previewPanelWidth={previewPanelWidth}
 								onFocusSkills={() => setFocusedColumn("content2")}
 								onInstallComplete={() => setRefreshKey((k) => k + 1)}
 								onError={(msg) => {

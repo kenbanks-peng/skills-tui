@@ -87,6 +87,9 @@ interface ViewByRepoProps {
 	agents: AgentConfig[];
 	selectedAgents: Set<string>;
 	cacheExpiryMs: number;
+	repoPanelWidth: number;
+	skillsPanelWidth: number;
+	previewPanelWidth: number;
 	onFocusSkills: () => void;
 	onInstallComplete: () => void;
 	onError: (msg: string) => void;
@@ -100,6 +103,9 @@ export function ViewByRepo({
 	agents,
 	selectedAgents,
 	cacheExpiryMs,
+	repoPanelWidth,
+	skillsPanelWidth,
+	previewPanelWidth,
 	onFocusSkills,
 	onInstallComplete,
 	onError,
@@ -342,7 +348,7 @@ export function ViewByRepo({
 			{/* Repos column */}
 			<box
 				flexDirection="column"
-				width={40}
+				width={repoPanelWidth}
 				border
 				borderStyle={focusedColumn === "repos" ? "double" : "rounded"}
 				borderColor={
@@ -384,6 +390,7 @@ export function ViewByRepo({
 			{showSkills && (
 				<box flexDirection="row" flexGrow={1}>
 					<SkillsList
+						width={skillsPanelWidth}
 						focusedColumn={focusedColumn}
 						filteredSkills={filteredSkills}
 						selectedSkills={selectedSkills}
@@ -394,6 +401,7 @@ export function ViewByRepo({
 						adjustedVH={adjustedVH}
 					/>
 					<SkillPreview
+						width={previewPanelWidth}
 						skillName={activeSkill}
 						path={previewPath}
 						content={previewContent}

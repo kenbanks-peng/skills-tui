@@ -3,6 +3,7 @@ import { CHECK_MARK, theme } from "#lib/theme";
 import { truncateText } from "#lib/utils";
 
 interface SkillsListProps {
+	width: number;
 	focusedColumn: "repos" | "skills" | null;
 	filteredSkills: string[];
 	selectedSkills: Set<string>;
@@ -14,6 +15,7 @@ interface SkillsListProps {
 }
 
 export function SkillsList({
+	width,
 	focusedColumn,
 	filteredSkills,
 	selectedSkills,
@@ -33,8 +35,7 @@ export function SkillsList({
 	return (
 		<box
 			flexDirection="column"
-			width={40}
-			flexGrow={1}
+			width={width}
 			border
 			borderStyle={focusedColumn === "skills" ? "double" : "rounded"}
 			borderColor={focusedColumn === "skills" ? theme.lavender : theme.surface2}
