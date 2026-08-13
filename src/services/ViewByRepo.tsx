@@ -87,9 +87,6 @@ interface ViewByRepoProps {
 	agents: AgentConfig[];
 	selectedAgents: Set<string>;
 	cacheExpiryMs: number;
-	repoPanelWidth: number;
-	skillsPanelWidth: number;
-	previewPanelWidth: number;
 	onFocusSkills: () => void;
 	onInstallComplete: () => void;
 	onError: (msg: string) => void;
@@ -103,15 +100,17 @@ export function ViewByRepo({
 	agents,
 	selectedAgents,
 	cacheExpiryMs,
-	repoPanelWidth,
-	skillsPanelWidth,
-	previewPanelWidth,
 	onFocusSkills,
 	onInstallComplete,
 	onError,
 	searchFilter,
 }: ViewByRepoProps) {
-	const { height } = useTerminalDimensions();
+	const { width: terminalWidth, height } = useTerminalDimensions();
+	// Reserve a fixed, small width for the middle skills pane. Preview receives
+	// the rest of the content width and remains visible at this terminal size.
+	const contentWidth = Math.max(0, terminalWidth - 30);
+	const repoPanelWidth = Math.max(14, Math.floor(contentWidth * 0.34));
+	const skillsPanelWidth = Math.max(12, Math.floor(contentWidth * 0.26));
 	const [selectedRepo, setSelectedRepo] = useState<RepoSource | null>(null);
 	const [availableSkills, setAvailableSkills] = useState<string[]>([]);
 	const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
@@ -349,6 +348,8 @@ export function ViewByRepo({
 			<box
 				flexDirection="column"
 				width={repoPanelWidth}
+				flexShrink={1}
+				minWidth={0}
 				border
 				borderStyle={focusedColumn === "repos" ? "double" : "rounded"}
 				borderColor={
@@ -388,7 +389,7 @@ export function ViewByRepo({
 
 			{/* Skills column */}
 			{showSkills && (
-				<box flexDirection="row" flexGrow={1}>
+				<box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
 					<SkillsList
 						width={skillsPanelWidth}
 						focusedColumn={focusedColumn}
@@ -401,7 +402,6 @@ export function ViewByRepo({
 						adjustedVH={adjustedVH}
 					/>
 					<SkillPreview
-						width={previewPanelWidth}
 						skillName={activeSkill}
 						path={previewPath}
 						content={previewContent}

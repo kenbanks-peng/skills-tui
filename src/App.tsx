@@ -190,21 +190,8 @@ export function App() {
 
 	const col1Width = 28;
 	const minWidth = 80;
-	// Keep all three repository panels visible. Their previous fixed widths
-	// required 148 columns and caused Preview to be clipped on narrower screens.
-	const repositoryAreaWidth = width - col1Width - 2;
-	const repoPanelWidth = Math.min(
-		40,
-		Math.max(16, Math.floor(repositoryAreaWidth * 0.34)),
-	);
-	const skillsPanelWidth = Math.min(
-		40,
-		Math.max(16, Math.floor(repositoryAreaWidth * 0.33)),
-	);
-	const previewPanelWidth = Math.max(
-		16,
-		repositoryAreaWidth - repoPanelWidth - skillsPanelWidth,
-	);
+	// Repository panels use flex sizing so none are pushed outside a narrow
+	// terminal. The repository list gets less space than the other two panels.
 	const minHeight = 20;
 
 	if (width < minWidth || height < minHeight) {
@@ -293,7 +280,7 @@ export function App() {
 				</box>
 
 				{/* Content area with optional search */}
-				<box flexDirection="column" flexGrow={1}>
+				<box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
 					<box flexDirection="row" flexGrow={1} gap={1}>
 						{selectedServiceId === ServiceId.VIEW_BY_SKILL && (
 							<ViewBySkill
@@ -315,9 +302,6 @@ export function App() {
 								agents={agents}
 								selectedAgents={selectedAgents}
 								cacheExpiryMs={cacheExpiryMs}
-								repoPanelWidth={repoPanelWidth}
-								skillsPanelWidth={skillsPanelWidth}
-								previewPanelWidth={previewPanelWidth}
 								onFocusSkills={() => setFocusedColumn("content2")}
 								onInstallComplete={() => setRefreshKey((k) => k + 1)}
 								onError={(msg) => {
