@@ -161,8 +161,70 @@ export async function parseInstalledSkills(
 	}
 }
 
+// Parse the skills CLI table without depending on its border characters.
+export function parseSkillsCliOutput(text: string): string[] {
+	const skills = new Set<string>();
+	let inSkillsSection = false;
+
+	for (const line of text.split("\n")) {
+		const trimmed = line.trim();
+		if (/available skills/i.test(trimmed)) {
+			inSkillsSection = true;
+			continue;
+		}
+		if (!inSkillsSection) continue;
+		if (/^[└+]/.test(trimmed)) break;
+
+		// Support the CLI's Unicode table and a plain-text fallback. A skill name
+		// is deliberately constrained to directory-safe names used by the CLI.
+		const match = trimmed.match(/^(?:[│|]\s*)?([a-z0-9][a-z0-9_-]*)\s*$/i);
+		if (match?.[1]) skills.add(match[1]);
+	}
+
+	return [...skills].sort();
+}
+
+function githubRepoPath(repo: string): string | null {
+	if (/^[^/\s]+\/[^/\s]+$/.test(repo)) return repo;
+	const match = repo.match(
+		/^https?:\/\/(?:www\.)?github\.com\/([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/,
+	);
+	return match?.[1] ?? null;
+}
+
+interface GithubTreeResponse {
+	tree?: { path?: string; type?: string }[];
+}
+
+// Discover skills directly when the external CLI cannot list a GitHub repo.
+// This keeps repository browsing useful even if the user's skills executable is
+// missing or incompatible.
+async function listGithubRepoSkills(repo: string): Promise<string[]> {
+	const path = githubRepoPath(repo);
+	if (!path) return [];
+
+	try {
+		const response = await fetch(
+			`https://api.github.com/repos/${path}/git/trees/HEAD?recursive=1`,
+			{ headers: { Accept: "application/vnd.github+json" } },
+		);
+		if (!response.ok) return [];
+		const data = (await response.json()) as GithubTreeResponse;
+		const skills = new Set<string>();
+		for (const entry of data.tree ?? []) {
+			if (entry.type !== "blob" || !entry.path?.endsWith("/SKILL.md")) continue;
+			const skill = entry.path.slice(0, -"/SKILL.md".length).split("/").pop();
+			if (skill) skills.add(skill);
+		}
+		return [...skills].sort();
+	} catch {
+		return [];
+	}
+}
+
 // Per-repo cache entry
 interface RepoCacheEntry {
+	version: 2;
 	skills: string[];
 	timestamp: number;
 }
@@ -178,7 +240,11 @@ async function readRepoCache(repo: string): Promise<RepoCacheEntry | null> {
 	try {
 		const text = await readTextFile(repoCacheFile(repo));
 		if (text === null) return null;
-		return JSON.parse(text);
+		const entry = JSON.parse(text) as Partial<RepoCacheEntry>;
+		// Version 1 cached empty results whenever the skills CLI failed. Ignore
+		// those entries so existing users recover automatically after upgrading.
+		if (entry.version !== 2 || !Array.isArray(entry.skills)) return null;
+		return entry as RepoCacheEntry;
 	} catch {
 		return null;
 	}
@@ -210,35 +276,15 @@ export async function loadSkillsFromRepo(
 			return cached.skills;
 		}
 
-		// Fetch fresh data
+		// Fetch fresh data. The skills CLI is the primary source because it also
+		// supports non-GitHub repositories. When it is unavailable or changes its
+		// display format, discover SKILL.md files directly from GitHub instead.
 		const text = await listRepoSkills(repo);
-
-		// Parse skill names from the output
-		const skills: string[] = [];
-		const lines = text.split("\n");
-		let inSkillsSection = false;
-
-		for (const line of lines) {
-			const trimmed = line.trim();
-			if (trimmed.includes("Available Skills")) {
-				inSkillsSection = true;
-				continue;
-			}
-			if (inSkillsSection) {
-				// Look for lines that start with │ followed by a skill name
-				const match = trimmed.match(/^│\s+([a-z0-9-]+)$/);
-				if (match?.[1]) {
-					skills.push(match[1]);
-				}
-				// Stop at the closing line
-				if (trimmed.startsWith("└")) {
-					break;
-				}
-			}
-		}
+		let skills = parseSkillsCliOutput(text);
+		if (skills.length === 0) skills = await listGithubRepoSkills(repo);
 
 		// Write per-repo cache file (no shared state, no race)
-		await writeRepoCache(repo, { skills, timestamp: Date.now() });
+		await writeRepoCache(repo, { version: 2, skills, timestamp: Date.now() });
 
 		return skills;
 	} catch (err) {
