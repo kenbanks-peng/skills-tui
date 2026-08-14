@@ -148,7 +148,6 @@ export function ViewByRepo({
 		? availableSkills.filter((s) => s.toLowerCase().includes(lowerFilter))
 		: availableSkills;
 
-	const showSkills = availableSkills.length > 0 || loadingSkills;
 	const repoSelectHeight = viewportHeight(height, 15, 5);
 	const repoOptions = filteredRepos.map((repo) => ({
 		name: repoDisplayName(repo),
@@ -348,8 +347,7 @@ export function ViewByRepo({
 			<box
 				flexDirection="column"
 				width={repoPanelWidth}
-				flexShrink={1}
-				minWidth={0}
+				flexShrink={0}
 				border
 				borderStyle={focusedColumn === "repos" ? "double" : "rounded"}
 				borderColor={
@@ -387,9 +385,9 @@ export function ViewByRepo({
 				)}
 			</box>
 
-			{/* Skills column */}
-			{showSkills && (
-				<box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0}>
+			{/* Always show the selected repository's skills pane. Rendering it only
+			    after a successful fetch made the entire right side disappear. */}
+			<box flexDirection="row" flexGrow={1} minWidth={0}>
 					<SkillsList
 						width={skillsPanelWidth}
 						focusedColumn={focusedColumn}
@@ -408,7 +406,6 @@ export function ViewByRepo({
 						loading={loadingPreview}
 					/>
 				</box>
-			)}
 		</>
 	);
 }

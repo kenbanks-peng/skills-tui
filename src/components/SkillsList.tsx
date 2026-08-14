@@ -36,8 +36,7 @@ export function SkillsList({
 		<box
 			flexDirection="column"
 			width={width}
-			flexShrink={1}
-			minWidth={0}
+			flexShrink={0}
 			border
 			borderStyle={focusedColumn === "skills" ? "double" : "rounded"}
 			borderColor={focusedColumn === "skills" ? theme.lavender : theme.surface2}
