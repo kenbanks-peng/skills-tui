@@ -2,6 +2,8 @@ import { TextAttributes } from "@opentui/core";
 import { theme } from "#lib/theme";
 import { truncateText } from "#lib/utils";
 
+export const SKILL_PREVIEW_MIN_WIDTH = 36;
+
 interface SkillPreviewProps {
 	skillName: string | null;
 	path: string | null;
@@ -65,7 +67,7 @@ export function SkillPreview({
 			flexDirection="column"
 			flexGrow={1}
 			flexBasis={0}
-			minWidth={0}
+			minWidth={SKILL_PREVIEW_MIN_WIDTH}
 			border
 			borderStyle="rounded"
 			borderColor={theme.surface2}

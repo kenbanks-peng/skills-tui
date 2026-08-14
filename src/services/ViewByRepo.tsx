@@ -2,8 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useState } from "react";
-import { SkillPreview } from "#components/SkillPreview";
-import { SkillsList } from "#components/SkillsList";
+import {
+	SKILL_PREVIEW_MIN_WIDTH,
+	SkillPreview,
+} from "#components/SkillPreview";
+import { SKILLS_LIST_MIN_WIDTH, SkillsList } from "#components/SkillsList";
 import { useScrollableList } from "#hooks/useScrollableList";
 import type { AgentConfig, RepoSource } from "#lib/config";
 import {
@@ -106,11 +109,20 @@ export function ViewByRepo({
 	searchFilter,
 }: ViewByRepoProps) {
 	const { width: terminalWidth, height } = useTerminalDimensions();
-	// Reserve a fixed, small width for the middle skills pane. Preview receives
-	// the rest of the content width and remains visible at this terminal size.
+	// The preview needs enough space to show useful information. When it cannot
+	// retain its minimum width, use the available room for the skills list.
 	const contentWidth = Math.max(0, terminalWidth - 30);
 	const repoPanelWidth = Math.max(14, Math.floor(contentWidth * 0.34));
-	const skillsPanelWidth = Math.max(12, Math.floor(contentWidth * 0.26));
+	const preferredSkillsPanelWidth = Math.max(
+		SKILLS_LIST_MIN_WIDTH,
+		Math.floor(contentWidth * 0.26),
+	);
+	const showPreview =
+		contentWidth - repoPanelWidth - preferredSkillsPanelWidth >=
+		SKILL_PREVIEW_MIN_WIDTH;
+	const skillsPanelWidth = showPreview
+		? preferredSkillsPanelWidth
+		: Math.max(SKILLS_LIST_MIN_WIDTH, contentWidth - repoPanelWidth);
 	const [selectedRepo, setSelectedRepo] = useState<RepoSource | null>(null);
 	const [availableSkills, setAvailableSkills] = useState<string[]>([]);
 	const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
@@ -399,12 +411,14 @@ export function ViewByRepo({
 						activeIndex={skillsList.index}
 						adjustedVH={adjustedVH}
 					/>
-					<SkillPreview
-						skillName={activeSkill}
-						path={previewPath}
-						content={previewContent}
-						loading={loadingPreview}
-					/>
+					{showPreview && (
+						<SkillPreview
+							skillName={activeSkill}
+							path={previewPath}
+							content={previewContent}
+							loading={loadingPreview}
+						/>
+					)}
 				</box>
 		</>
 	);

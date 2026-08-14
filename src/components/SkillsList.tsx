@@ -2,6 +2,8 @@ import { TextAttributes } from "@opentui/core";
 import { CHECK_MARK, theme } from "#lib/theme";
 import { truncateText } from "#lib/utils";
 
+export const SKILLS_LIST_MIN_WIDTH = 36;
+
 interface SkillsListProps {
 	width: number;
 	focusedColumn: "repos" | "skills" | null;
@@ -36,6 +38,7 @@ export function SkillsList({
 		<box
 			flexDirection="column"
 			width={width}
+			minWidth={SKILLS_LIST_MIN_WIDTH}
 			flexShrink={0}
 			border
 			borderStyle={focusedColumn === "skills" ? "double" : "rounded"}
