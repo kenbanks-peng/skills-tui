@@ -9,7 +9,7 @@ bun = "latest"
 run = "bun install"
 
 [tasks.start]
-run = "bun src/index.tsx"
+run = "./bin/skills-tui"
 
 [tasks.dev]
 run = "bun --watch src/index.tsx"

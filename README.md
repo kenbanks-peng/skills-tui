@@ -28,7 +28,7 @@ cd skills-tui
 bun install
 
 # Run
-bun src/index.tsx
+./bin/skills-tui
 ```
 
 ## Configuration
