@@ -54,7 +54,7 @@ export function SkillsList({
 			) : filteredSkills.length > 0 ? (
 				<>
 					{hasPrevious && (
-						<box paddingLeft={1} marginBottom={1}>
+						<box paddingLeft={1}>
 							<text fg={theme.overlay1}>
 								{"\u2191"} {scrollOffset} more above
 							</text>
