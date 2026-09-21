@@ -2,11 +2,20 @@ import {
   lstatSync,
   readdirSync,
   readlinkSync,
+  realpathSync,
   statSync,
   unlinkSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import type { AgentConfig } from "#lib/config";
 
 function isMissing(error: unknown): boolean {
@@ -21,6 +30,25 @@ function isInside(root: string, target: string): boolean {
     !path.startsWith(`..${sep}`) &&
     !isAbsolute(path)
   );
+}
+
+// Canonicalize existing ancestors even when the skill itself is gone.
+// This also makes aliases such as /var and /private/var comparable.
+function physicalPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch (error) {
+    if (!isMissing(error) || dirname(path) === path) throw error;
+    // Do not guess through an unresolved symlink.
+    let unresolvedLink = false;
+    try {
+      unresolvedLink = lstatSync(path).isSymbolicLink();
+    } catch (statError) {
+      if (!isMissing(statError)) throw statError;
+    }
+    if (unresolvedLink) throw error;
+    return join(physicalPath(dirname(path)), basename(path));
+  }
 }
 
 function targetIsMissing(path: string): boolean {
@@ -57,8 +85,12 @@ export function reconcileSkillLinks(
     );
     for (const directory of directories) {
       let entries: string[];
+      let physicalDirectory: string;
+      let physicalShared: string;
       try {
         entries = readdirSync(directory);
+        physicalDirectory = realpathSync(directory);
+        physicalShared = physicalPath(shared);
       } catch (error) {
         if (!isMissing(error)) result.errors.push({ path: directory, error });
         continue;
@@ -69,8 +101,9 @@ export function reconcileSkillLinks(
           const before = lstatSync(path);
           if (!before.isSymbolicLink()) continue;
           const link = readlinkSync(path);
-          const target = resolve(dirname(path), link);
-          if (!isInside(shared, target) || !targetIsMissing(path)) continue;
+          const target = physicalPath(resolve(physicalDirectory, link));
+          if (!isInside(physicalShared, target) || !targetIsMissing(path))
+            continue;
 
           // Recheck the link and its target before unlinking. Never use recursive removal.
           const current = lstatSync(path);
@@ -80,6 +113,9 @@ export function reconcileSkillLinks(
             current.ino !== before.ino ||
             current.ctimeMs !== before.ctimeMs ||
             readlinkSync(path) !== link ||
+            realpathSync(directory) !== physicalDirectory ||
+            physicalPath(shared) !== physicalShared ||
+            physicalPath(resolve(physicalDirectory, link)) !== target ||
             !targetIsMissing(path)
           )
             continue;

@@ -57,6 +57,50 @@ describe("startup skill link reconciliation", () => {
     expect(reconcileSkillLinks(agents, locations).removed).toEqual([]);
   });
 
+  test("resolves relative links from the physical agent folder", () => {
+    const physical = join(locations.home, "Software/dotfiles/pi/agent/skills");
+    mkdirSync(physical, { recursive: true });
+    link(
+      join(locations.home, ".pi"),
+      join(locations.home, "Software/dotfiles/pi"),
+    );
+    const path = link(
+      join(globalDir, "gone"),
+      relative(physical, join(shared, "gone")),
+    );
+    expect(reconcileSkillLinks(agents, locations)).toEqual({
+      removed: [path],
+      errors: [],
+    });
+    expect(() => lstatSync(path)).toThrow();
+  });
+
+  test("preserves links that only appear inside the shared folder through an alias", () => {
+    const physical = join(locations.home, "Software/dotfiles/pi/agent/skills");
+    mkdirSync(physical, { recursive: true });
+    link(
+      join(locations.home, ".pi"),
+      join(locations.home, "Software/dotfiles/pi"),
+    );
+    const path = link(
+      join(globalDir, "outside"),
+      relative(globalDir, join(shared, "gone")),
+    );
+    expect(reconcileSkillLinks(agents, locations).removed).toEqual([]);
+    expect(lstatSync(path).isSymbolicLink()).toBe(true);
+  });
+
+  test("handles a shared folder that is also a symlink", () => {
+    const physicalShared = join(locations.home, "library");
+    mkdirSync(physicalShared, { recursive: true });
+    link(shared, physicalShared);
+    const path = link(join(globalDir, "gone"), join(shared, "gone"));
+    expect(reconcileSkillLinks(agents, locations)).toEqual({
+      removed: [path],
+      errors: [],
+    });
+  });
+
   test("preserves live links, regular files, directories, and nested links", () => {
     mkdirSync(join(shared, "live"), { recursive: true });
     const live = link(join(globalDir, "live"), join(shared, "live"));

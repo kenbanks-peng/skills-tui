@@ -9,7 +9,7 @@ Only immediate symlink entries in configured agent Skill Locations are checked. 
 - User Scope: `~/.agents/skills/`
 - Project Scope: `<project>/.agents/skills/`
 
-Relative link targets are resolved from the link's parent directory. The check leaves live links, unrelated targets, regular files, directories, and nested skill content unchanged. It does not change lock files or reinstall skills.
+Relative link targets are resolved from the physical parent directory, after following directory symlinks. This supports agent folders linked into a dotfiles repository. Existing path aliases are resolved before the scope check. The check leaves live links, unrelated targets, regular files, directories, and nested skill content unchanged. It does not change lock files or reinstall skills.
 
 The link and target are checked again before removal. Missing locations are skipped. Other filesystem errors are reported at startup; they do not count as proof that a target is missing. Cleanup continues at other entries and locations.
 
