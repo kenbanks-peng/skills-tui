@@ -1,6 +1,5 @@
 import { TextAttributes } from "@opentui/core";
 import { CHECK_MARK, theme } from "#lib/theme";
-import { truncateText } from "#lib/utils";
 
 export const SKILLS_LIST_MIN_WIDTH = 36;
 
@@ -33,6 +32,8 @@ export function SkillsList({
 		scrollOffset + adjustedVH,
 	);
 	const hasMore = scrollOffset + adjustedVH < filteredSkills.length;
+	// Border, panel padding, and row padding use five columns.
+	const rowTextWidth = Math.max(1, width - 5);
 
 	return (
 		<box
@@ -66,7 +67,6 @@ export function SkillsList({
 							const isHighlighted = idx === activeIndex;
 							const isSelected = selectedSkills.has(skill);
 							const checkbox = isSelected ? `[${CHECK_MARK}] ` : "[ ] ";
-							const displayName = truncateText(skill, 31);
 							return (
 								<box
 									key={skill}
@@ -76,6 +76,10 @@ export function SkillsList({
 									}
 								>
 									<text
+										width={rowTextWidth}
+										height={1}
+										wrapMode="none"
+										truncate
 										fg={
 											isSelected
 												? theme.green
@@ -85,8 +89,7 @@ export function SkillsList({
 										}
 										attributes={isHighlighted ? TextAttributes.BOLD : undefined}
 									>
-										{checkbox}
-										{displayName}
+										{`${checkbox}${skill}`}
 									</text>
 								</box>
 							);

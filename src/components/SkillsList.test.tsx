@@ -76,3 +76,31 @@ test("more above is immediately followed by the first visible skill", async () =
   expect(indicatorRow).toBeGreaterThan(0);
   expect(lines[indicatorRow + 1]).toContain("skill-10");
 });
+
+test("long skill names use exactly one row at the minimum panel width", async () => {
+  const setup = await testRender(
+    <SkillsList
+      width={36}
+      focusedColumn="skills"
+      filteredSkills={["a".repeat(50), "second-skill"]}
+      selectedSkills={new Set()}
+      loadingSkills={false}
+      searchFilter=""
+      scrollOffset={0}
+      activeIndex={0}
+      adjustedVH={2}
+    />,
+    { width: 80, height: 12 },
+  );
+
+  try {
+    await setup.renderOnce();
+    const lines = setup.captureCharFrame().split("\n");
+    const firstSkillRow = lines.findIndex((line) => line.includes("[ ]"));
+    expect(firstSkillRow).toBeGreaterThan(0);
+    expect(lines[firstSkillRow]).toContain("...");
+    expect(lines[firstSkillRow + 1]).toContain("second-skill");
+  } finally {
+    await act(async () => setup.renderer.destroy());
+  }
+});
