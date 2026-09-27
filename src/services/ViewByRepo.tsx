@@ -2,13 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useState } from "react";
-import {
-	SKILL_PREVIEW_MIN_WIDTH,
-	SkillPreview,
-} from "#components/SkillPreview";
-import { SKILLS_LIST_MIN_WIDTH, SkillsList } from "#components/SkillsList";
+import { SkillPreview } from "#components/SkillPreview";
+import { SkillsList } from "#components/SkillsList";
 import { useScrollableList } from "#hooks/useScrollableList";
 import type { AgentConfig, RepoSource } from "#lib/config";
+import { assessRepositoryPanelWidths } from "#lib/repository-panel-layout";
 import {
 	ensureAgentSymlinks,
 	getInstalledLocalSkills,
@@ -111,20 +109,6 @@ export function ViewByRepo({
 	searchFilter,
 }: ViewByRepoProps) {
 	const { width: terminalWidth, height } = useTerminalDimensions();
-	// The preview needs enough space to show useful information. When it cannot
-	// retain its minimum width, use the available room for the skills list.
-	const contentWidth = Math.max(0, terminalWidth - 30);
-	const repoPanelWidth = Math.max(14, Math.floor(contentWidth * 0.34));
-	const preferredSkillsPanelWidth = Math.max(
-		SKILLS_LIST_MIN_WIDTH,
-		Math.floor(contentWidth * 0.26),
-	);
-	const showPreview =
-		contentWidth - repoPanelWidth - preferredSkillsPanelWidth >=
-		SKILL_PREVIEW_MIN_WIDTH;
-	const skillsPanelWidth = showPreview
-		? preferredSkillsPanelWidth
-		: Math.max(SKILLS_LIST_MIN_WIDTH, contentWidth - repoPanelWidth);
 	const [selectedRepo, setSelectedRepo] = useState<RepoSource | null>(null);
 	const [availableSkills, setAvailableSkills] = useState<string[]>([]);
 	const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
@@ -161,6 +145,20 @@ export function ViewByRepo({
 	const filteredSkills = searchFilter
 		? availableSkills.filter((s) => s.toLowerCase().includes(lowerFilter))
 		: availableSkills;
+
+	// Reassess the panels whenever the terminal or surveyed content changes.
+	// Keep the survey unfiltered so typing in search does not make panels jump.
+	const contentWidth = Math.max(0, terminalWidth - 30);
+	const {
+		repository: repoPanelWidth,
+		skills: skillsPanelWidth,
+		preview: previewPanelWidth,
+		showPreview,
+	} = assessRepositoryPanelWidths(
+		contentWidth,
+		repos.map(repoDisplayName),
+		availableSkills,
+	);
 
 	const repoSelectHeight = viewportHeight(height, 15, 5);
 	const repoOptions = filteredRepos.map((repo) => ({
@@ -433,6 +431,7 @@ export function ViewByRepo({
 					/>
 					{showPreview && (
 						<SkillPreview
+							width={previewPanelWidth}
 							skillName={activeSkill}
 							path={previewPath}
 							content={previewContent}

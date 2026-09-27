@@ -5,6 +5,7 @@ import { truncateText } from "#lib/utils";
 export const SKILL_PREVIEW_MIN_WIDTH = 36;
 
 interface SkillPreviewProps {
+	width: number;
 	skillName: string | null;
 	path: string | null;
 	content: string | null;
@@ -54,6 +55,7 @@ function sectionSnippet(content: string, heading: string): string | null {
 }
 
 export function SkillPreview({
+	width,
 	skillName,
 	path,
 	content,
@@ -65,9 +67,9 @@ export function SkillPreview({
 	return (
 		<box
 			flexDirection="column"
-			flexGrow={1}
-			flexBasis={0}
+			width={width}
 			minWidth={SKILL_PREVIEW_MIN_WIDTH}
+			flexShrink={0}
 			border
 			borderStyle="rounded"
 			borderColor={theme.surface2}
