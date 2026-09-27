@@ -54,6 +54,7 @@ export function App() {
 	const [focusedColumn, setFocusedColumn] = useState<FocusedColumn>("services");
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [refreshKey, setRefreshKey] = useState(0);
+	const [repoCacheRefreshKey, setRepoCacheRefreshKey] = useState(0);
 	const [searchFilter, setSearchFilter] = useState("");
 	const [cacheExpiryMs, setCacheExpiryMs] = useState(24 * 60 * 60 * 1000);
 
@@ -79,7 +80,7 @@ export function App() {
 				// before pruning so installed skills survive an expired cache.
 				void reconcileRepoCaches(repoList).finally(() => {
 					pruneCache(repoList, expiryMs);
-					setRefreshKey((key) => key + 1);
+					setRepoCacheRefreshKey((key) => key + 1);
 				});
 			},
 		);
@@ -309,7 +310,7 @@ export function App() {
 								agents={agents}
 								selectedAgents={selectedAgents}
 								cacheExpiryMs={cacheExpiryMs}
-								refreshKey={refreshKey}
+								cacheRefreshKey={repoCacheRefreshKey}
 								onFocusSkills={() => setFocusedColumn("content2")}
 								onInstallComplete={() => setRefreshKey((k) => k + 1)}
 								onError={(msg) => {

@@ -90,7 +90,7 @@ interface ViewByRepoProps {
 	agents: AgentConfig[];
 	selectedAgents: Set<string>;
 	cacheExpiryMs: number;
-	refreshKey: number;
+	cacheRefreshKey: number;
 	onFocusSkills: () => void;
 	onInstallComplete: () => void;
 	onError: (msg: string) => void;
@@ -104,7 +104,7 @@ export function ViewByRepo({
 	agents,
 	selectedAgents,
 	cacheExpiryMs,
-	refreshKey,
+	cacheRefreshKey,
 	onFocusSkills,
 	onInstallComplete,
 	onError,
@@ -146,7 +146,7 @@ export function ViewByRepo({
 				});
 			});
 		}
-	}, [repos, cacheExpiryMs, refreshKey]);
+	}, [repos, cacheExpiryMs, cacheRefreshKey]);
 
 	// Filter repos based on search
 	const lowerFilter = searchFilter.toLowerCase();
@@ -224,13 +224,25 @@ export function ViewByRepo({
 			setSelectedSkills(installed);
 			setLoadingSkills(false);
 		});
-	}, [
-		selectedRepo,
-		isGlobal,
-		cacheExpiryMs,
-		refreshKey,
-		skillsList.reset,
-	]);
+	}, [selectedRepo, isGlobal, cacheExpiryMs, skillsList.reset]);
+
+	// Re-read the selected repository after background cache reconciliation.
+	// Keep the current list and cursor visible while the refreshed data arrives.
+	useEffect(() => {
+		if (!selectedRepo || isFileRepo(selectedRepo) || cacheRefreshKey === 0)
+			return;
+
+		Promise.all([
+			fetchRepoSkills(selectedRepo, cacheExpiryMs),
+			loadInstalledSkills(selectedRepo, isGlobal),
+		]).then(([skills, installed]) => {
+			for (const skill of getSkillsOnDisk(skills, isGlobal))
+				installed.add(skill);
+			setAllRepoSkills((prev) => new Map(prev).set(selectedRepo, skills));
+			setAvailableSkills(skills);
+			setSelectedSkills(installed);
+		});
+	}, [selectedRepo, isGlobal, cacheExpiryMs, cacheRefreshKey]);
 
 	const runAction = (
 		action: "add" | "remove",
