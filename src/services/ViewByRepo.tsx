@@ -90,6 +90,7 @@ interface ViewByRepoProps {
 	agents: AgentConfig[];
 	selectedAgents: Set<string>;
 	cacheExpiryMs: number;
+	refreshKey: number;
 	onFocusSkills: () => void;
 	onInstallComplete: () => void;
 	onError: (msg: string) => void;
@@ -103,6 +104,7 @@ export function ViewByRepo({
 	agents,
 	selectedAgents,
 	cacheExpiryMs,
+	refreshKey,
 	onFocusSkills,
 	onInstallComplete,
 	onError,
@@ -144,7 +146,7 @@ export function ViewByRepo({
 				});
 			});
 		}
-	}, [repos, cacheExpiryMs]);
+	}, [repos, cacheExpiryMs, refreshKey]);
 
 	// Filter repos based on search
 	const lowerFilter = searchFilter.toLowerCase();
@@ -222,7 +224,13 @@ export function ViewByRepo({
 			setSelectedSkills(installed);
 			setLoadingSkills(false);
 		});
-	}, [selectedRepo, isGlobal, cacheExpiryMs, skillsList.reset]);
+	}, [
+		selectedRepo,
+		isGlobal,
+		cacheExpiryMs,
+		refreshKey,
+		skillsList.reset,
+	]);
 
 	const runAction = (
 		action: "add" | "remove",

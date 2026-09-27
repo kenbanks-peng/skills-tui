@@ -199,16 +199,16 @@ interface GithubTreeResponse {
 // Discover skills directly when the external CLI cannot list a GitHub repo.
 // This keeps repository browsing useful even if the user's skills executable is
 // missing or incompatible.
-async function listGithubRepoSkills(repo: string): Promise<string[]> {
+async function listGithubRepoSkills(repo: string): Promise<string[] | null> {
 	const path = githubRepoPath(repo);
-	if (!path) return [];
+	if (!path) return null;
 
 	try {
 		const response = await fetch(
 			`https://api.github.com/repos/${path}/git/trees/HEAD?recursive=1`,
 			{ headers: { Accept: "application/vnd.github+json" } },
 		);
-		if (!response.ok) return [];
+		if (!response.ok) return null;
 		const data = (await response.json()) as GithubTreeResponse;
 		const skills = new Set<string>();
 		for (const entry of data.tree ?? []) {
@@ -218,7 +218,21 @@ async function listGithubRepoSkills(repo: string): Promise<string[]> {
 		}
 		return [...skills].sort();
 	} catch {
-		return [];
+		return null;
+	}
+}
+
+async function discoverRepoSkills(repo: string): Promise<string[] | null> {
+	try {
+		const text = await listRepoSkills(repo);
+		const skills = parseSkillsCliOutput(text);
+		if (skills.length > 0) return skills;
+
+		// An empty GitHub repository result is valid. A failed GitHub request is
+		// not: callers must retain the previous cache when the source is unknown.
+		return githubRepoPath(repo) ? await listGithubRepoSkills(repo) : [];
+	} catch {
+		return null;
 	}
 }
 
@@ -269,28 +283,98 @@ export async function loadSkillsFromRepo(
 	options: { forceRefresh?: boolean } = {},
 ): Promise<string[]> {
 	try {
-		// Check cache first
-		const cached = options.forceRefresh ? null : await readRepoCache(repo);
+		const cached = await readRepoCache(repo);
 
-		if (cached && Date.now() - cached.timestamp <= cacheExpiryMs) {
+		if (
+			!options.forceRefresh &&
+			cached &&
+			Date.now() - cached.timestamp <= cacheExpiryMs
+		) {
 			return cached.skills;
 		}
 
-		// Fetch fresh data. The skills CLI is the primary source because it also
-		// supports non-GitHub repositories. When it is unavailable or changes its
-		// display format, discover SKILL.md files directly from GitHub instead.
-		const text = await listRepoSkills(repo);
-		let skills = parseSkillsCliOutput(text);
-		if (skills.length === 0) skills = await listGithubRepoSkills(repo);
+		const skills = await discoverRepoSkills(repo);
+		if (skills === null) return cached?.skills ?? [];
 
-		// Write per-repo cache file (no shared state, no race)
 		await writeRepoCache(repo, { version: 2, skills, timestamp: Date.now() });
-
 		return skills;
 	} catch (err) {
 		console.error("Failed to load skills:", err);
 		return [];
 	}
+}
+
+export interface ReconciledRepoSkills {
+	skills: string[];
+	removed: string[];
+}
+
+// Keep source skills and installed cached skills. Cached skills that satisfy
+// neither condition are no longer useful and must be removed.
+export function reconcileRepoSkillNames(
+	cached: string[],
+	source: string[],
+	installed: Set<string>,
+): ReconciledRepoSkills {
+	const sourceSkills = new Set(source);
+	const skills = new Set(source);
+	const removed: string[] = [];
+
+	for (const skill of cached) {
+		if (sourceSkills.has(skill) || installed.has(skill)) skills.add(skill);
+		else removed.push(skill);
+	}
+
+	return { skills: [...skills].sort(), removed: removed.sort() };
+}
+
+export interface RepoCacheReconciliation {
+	repo: RepoSource;
+	removed: string[];
+}
+
+// Refresh existing repository caches in the background at startup. A source
+// failure leaves its cache unchanged. Installed skills stay visible so the user
+// can still remove them after their source repository deletes them.
+export async function reconcileRepoCaches(
+	repos: RepoSource[],
+): Promise<RepoCacheReconciliation[]> {
+	const results = await Promise.all(
+		repos.map(async (repo): Promise<RepoCacheReconciliation | null> => {
+			if (isFileRepo(repo)) return null;
+			const cached = await readRepoCache(repo);
+			if (!cached) return null;
+
+			const source = await discoverRepoSkills(repo);
+			if (source === null) return null;
+
+			const [globalInstalled, projectInstalled] = await Promise.all([
+				loadInstalledSkills(repo, true),
+				loadInstalledSkills(repo, false),
+			]);
+			const installed = new Set([...globalInstalled, ...projectInstalled]);
+			for (const skill of getSkillsOnDisk(cached.skills, true))
+				installed.add(skill);
+			for (const skill of getSkillsOnDisk(cached.skills, false))
+				installed.add(skill);
+
+			const reconciled = reconcileRepoSkillNames(
+				cached.skills,
+				source,
+				installed,
+			);
+			await writeRepoCache(repo, {
+				version: 2,
+				skills: reconciled.skills,
+				timestamp: Date.now(),
+			});
+			return { repo, removed: reconciled.removed };
+		}),
+	);
+
+	return results.filter(
+		(result): result is RepoCacheReconciliation => result !== null,
+	);
 }
 
 export interface RepoNewSkillsInfo {

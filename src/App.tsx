@@ -20,7 +20,7 @@ import {
 	saveDisabledAgents,
 	type UniversalAgents,
 } from "#lib/config";
-import { pruneCache } from "#lib/skills";
+import { pruneCache, reconcileRepoCaches } from "#lib/skills";
 import { theme } from "#lib/theme";
 import { Find } from "#services/Find";
 import { Updates } from "#services/Updates";
@@ -73,7 +73,14 @@ export function App() {
 			([repoList, expiryMs]) => {
 				setCacheExpiryMs(expiryMs);
 				setRepos(repoList);
-				pruneCache(repoList, expiryMs);
+
+				// Do not delay the TUI. Refresh existing caches in the background,
+				// then reload repository views from the reconciled cache. Reconcile
+				// before pruning so installed skills survive an expired cache.
+				void reconcileRepoCaches(repoList).finally(() => {
+					pruneCache(repoList, expiryMs);
+					setRefreshKey((key) => key + 1);
+				});
 			},
 		);
 		loadUniversalAgents().then(setUniversalAgents);
@@ -302,6 +309,7 @@ export function App() {
 								agents={agents}
 								selectedAgents={selectedAgents}
 								cacheExpiryMs={cacheExpiryMs}
+								refreshKey={refreshKey}
 								onFocusSkills={() => setFocusedColumn("content2")}
 								onInstallComplete={() => setRefreshKey((k) => k + 1)}
 								onError={(msg) => {
