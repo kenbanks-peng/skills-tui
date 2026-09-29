@@ -19,4 +19,4 @@ The link and target are checked again before removal. Missing locations are skip
 
 A skill removed manually while the TUI is open leaves its dead links until the next startup.
 
-Run the isolated filesystem tests with `bun test`. Tests use temporary folders, not live Skill Locations.
+Run the isolated filesystem tests with `pnpm test`. Tests use temporary folders, not live Skill Locations.

@@ -25,7 +25,7 @@ git clone https://github.com/kenbanks-peng/skills-tui
 cd skills-tui
 
 # Install dependencies
-bun install
+pnpm install
 
 # Run
 ./bin/skills-tui

@@ -4,13 +4,14 @@ b = 2
 
 [tools]
 bun = "latest"
+pnpm = "latest"
 
 [tasks.install]
-run = "bun install"
+run = "pnpm install"
 
 [tasks.start]
 run = "./bin/skills-tui"
 
 [tasks.dev]
-run = "bun --watch src/index.tsx"
+run = "pnpm dev"
 
