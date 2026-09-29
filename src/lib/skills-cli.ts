@@ -8,7 +8,7 @@ function base(...rest: string[]): string[] {
 	return [getRunner(), "skills", ...rest];
 }
 
-interface RunResult {
+export interface RunResult {
 	code: number;
 	stdout: string;
 	stderr: string;
@@ -76,19 +76,14 @@ export async function removeSkill(
 	return run(args);
 }
 
-// --- Args for CommandOutput (streaming needed) ---
-
-export function checkArgs(isGlobal: boolean): string[] {
-	const args = base("check");
-	if (isGlobal) args.push("-g");
-	return args;
+export async function updateSkills(isGlobal: boolean): Promise<RunResult> {
+	return run(updateArgs(isGlobal));
 }
 
+// --- Args for CommandOutput (streaming needed) ---
+
 export function updateArgs(isGlobal: boolean): string[] {
-	const args = base("update");
-	if (isGlobal) args.push("-g");
-	args.push("-y");
-	return args;
+	return base("update", isGlobal ? "-g" : "-p", "-y");
 }
 
 export function findArgs(isGlobal: boolean, query: string): string[] {

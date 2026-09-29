@@ -3,7 +3,7 @@ import { useState } from "react";
 import { CommandOutput } from "#components/CommandOutput";
 import type { RepoSource } from "#lib/config";
 import { formatNewSkillsSummary } from "#lib/skills";
-import { checkArgs, updateArgs } from "#lib/skills-cli";
+import { updateArgs } from "#lib/skills-cli";
 import { theme } from "#lib/theme";
 
 interface UpdatesProps {
@@ -21,21 +21,15 @@ export function Updates({
 	cacheExpiryMs,
 	onBack,
 }: UpdatesProps) {
-	const [args, setArgs] = useState(() => checkArgs(isGlobal));
-	const [mode, setMode] = useState<"check" | "update">("check");
+	const [args, setArgs] = useState(() => updateArgs(isGlobal));
 	const [afterCommand] = useState(
 		() => () => formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs),
 	);
 
 	useKeyboard((key) => {
 		if (!focused) return;
-		if (key.name === "u") {
-			setMode("update");
-			setArgs(updateArgs(isGlobal));
-		}
 		if (key.name === "r") {
-			setMode("check");
-			setArgs(checkArgs(isGlobal));
+			setArgs([...updateArgs(isGlobal)]);
 		}
 	});
 
@@ -48,11 +42,9 @@ export function Updates({
 				paddingLeft={1}
 				paddingRight={1}
 			>
-				<text fg={theme.text}>
-					{mode === "check" ? "Checking for updates" : "Applying updates"}
-				</text>
+				<text fg={theme.text}>Applying latest versions</text>
 				<text fg={theme.overlay1}>
-					{"  "}u: apply updates  r: re-check  esc: back
+					{"  "}r: update again  esc: back
 				</text>
 			</box>
 			<CommandOutput

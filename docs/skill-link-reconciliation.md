@@ -1,6 +1,8 @@
-# Startup skill link reconciliation
+# Startup skill update and link reconciliation
 
-Skills TUI reconciles deployed skills and skill links once at startup, before it opens the interface. No confirmation is required. It does not run these checks on a timer, on scope changes, or after install/remove/update actions.
+Before it opens the interface, Skills TUI updates all lock-tracked skills in User Scope and Project Scope to their latest upstream revisions. No confirmation is required. A failure in one scope does not prevent an update in the other scope or prevent the interface from opening. The pinned `skills` CLI version controls update behavior; skill revisions are not pinned.
+
+After the updates, Skills TUI reconciles deployed skills and skill links once. It does not run this cleanup on a timer, on scope changes, or after install/remove/update actions.
 
 First, Skills TUI computes the enabled User Scope skills from the configured repositories and the skills CLI user lock. It removes every other immediate folder from `~/.agents/skills/`. A missing or malformed lock enables no lock-tracked skills. Skills in configured `file://` repositories remain enabled. Regular files and symlinks are not skill folders and remain unchanged. This check does not change the lock file.
 
