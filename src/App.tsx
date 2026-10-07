@@ -22,6 +22,7 @@ import {
 } from "#lib/config";
 import { pruneCache, reconcileRepoCaches } from "#lib/skills";
 import { theme } from "#lib/theme";
+import { syncAgentSkills } from "#lib/sync-agent-skills";
 import { Find } from "#services/Find";
 import { Updates } from "#services/Updates";
 import { ServiceId, services } from "#services/index";
@@ -269,18 +270,27 @@ export function App() {
 						selectedAgents={selectedAgents}
 						activeSettingIndex={activeSettingIndex}
 						onToggleGlobal={() => setIsGlobal((prev: boolean) => !prev)}
-						onToggleAgent={(agent) => {
-							setSelectedAgents((prev: Set<string>) => {
-								const newSet = new Set(prev);
-								if (newSet.has(agent)) newSet.delete(agent);
-								else newSet.add(agent);
-								const disabled = new Set(
-									agents
-										.filter((a: AgentConfig) => !newSet.has(a.name))
-										.map((a: AgentConfig) => a.name),
+						onToggleAgent={(name) => {
+							const agent = agents.find((a) => a.name === name);
+							if (!agent) return;
+							const next = new Set(selectedAgents);
+							if (next.has(name)) next.delete(name);
+							else next.add(name);
+							const result = syncAgentSkills(agent, agents, next, undefined, universalAgents);
+							setSelectedAgents(next);
+							setRefreshKey((key) => key + 1);
+							if (result.errors.length > 0) {
+								setErrorMessage(
+									`Could not fully sync ${agent.display}: ${result.errors.map(({ path, error }) => `${path}: ${String(error)}`).join("; ")}`,
 								);
-								saveDisabledAgents(disabled);
-								return newSet;
+							} else {
+								setErrorMessage(null);
+							}
+							const disabled = new Set(
+								agents.filter((a) => !next.has(a.name)).map((a) => a.name),
+							);
+							void saveDisabledAgents(disabled).catch((error) => {
+								setErrorMessage(`Could not save agent settings: ${String(error)}`);
 							});
 						}}
 						onActiveIndexChange={setActiveSettingIndex}

@@ -19,4 +19,28 @@ The link and target are checked again before removal. Missing locations are skip
 
 A skill removed manually while the TUI is open leaves its dead links until the next startup.
 
+## Agent selection synchronization
+
+Changing an agent checkbox in Settings synchronizes that agent's links immediately
+in User Scope and the current Project Scope, regardless of the displayed scope.
+Scopes supported by the agent in `[agents.universal]` are skipped before any
+filesystem access: `both` skips both scopes; `local` skips Project Scope only.
+These agents already discover skills from the shared location, even if their
+registry entry also lists an agent-specific Skill Location.
+For other scopes, enabling backfills links for existing shared Skill Instances
+containing a `SKILL.md`. Disabling removes that agent's immediate links to those shared
+instances, including dead links. Shared skill content and lock files are unchanged.
+This is separate from startup cleanup and does not download or reinstall skills.
+
+Independent agent copies and unrelated links remain unchanged. An existing
+conflicting entry is reported in the interface rather than overwritten.
+Synchronization continues for other entries and scopes after an error; the
+selection is still saved. Toggling off and on retries backfilling after resolving
+a conflict. The Installed view reloads after synchronization.
+
+A location still used by another selected agent is preserved. The shared
+`.agents/skills` location itself is never removed. Agents configured to read
+shared locations directly (such as OpenCode and Pi) can therefore retain Agent
+Visibility even when unchecked. Selection is not an access-control boundary.
+
 Run the isolated filesystem tests with `pnpm test`. Tests use temporary folders, not live Skill Locations.

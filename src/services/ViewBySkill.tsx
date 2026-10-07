@@ -24,7 +24,7 @@ export function ViewBySkill({
 	agents,
 	selectedAgents,
 	universalAgents,
-	refreshKey: _refreshKey,
+	refreshKey,
 	searchFilter,
 }: ViewBySkillProps) {
 	const { height } = useTerminalDimensions();
@@ -44,7 +44,7 @@ export function ViewBySkill({
 				setLoading(false);
 			});
 		}
-	}, [isGlobal, selectedAgents, agents]);
+	}, [isGlobal, selectedAgents, agents, refreshKey]);
 
 	const lowerFilter = searchFilter.toLowerCase();
 	const filteredSkills = searchFilter
