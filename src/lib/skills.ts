@@ -13,6 +13,7 @@ import { join, resolve } from "node:path";
 import { existsSync, readTextFile, writeTextFile } from "#lib/compat";
 import type { AgentConfig, RepoSource } from "#lib/config";
 import { cacheDir } from "#lib/config";
+import { syncCopiedSkills } from "#lib/copy-agent-skills";
 import { listRepoSkills, listSkills } from "#lib/skills-cli";
 import {
 	fileUrlToPath,
@@ -537,6 +538,11 @@ export function ensureAgentSymlinks(
 
 	for (const agent of agents) {
 		if (!selectedAgents.has(agent.name)) continue;
+		if (agent.mode === "copy") {
+			const result = syncCopiedSkills(agent, isGlobal ? "global" : "local", true);
+			if (result.errors.length) throw new Error(result.errors.map(({ path, error }) => `${path}: ${String(error)}`).join("; "));
+			continue;
+		}
 		const agentPath = isGlobal ? agent.global : agent.local;
 		// Skip agents that already use the standard .agents/skills/ path
 		if (agentPath === ".agents/skills/" || agentPath === "~/.agents/skills/")
@@ -594,6 +600,11 @@ export function removeLocalSkill(
 	// Remove symlinks from agent paths
 	for (const agent of agents) {
 		if (!selectedAgents.has(agent.name)) continue;
+		if (agent.mode === "copy") {
+			const result = syncCopiedSkills(agent, isGlobal ? "global" : "local", true);
+			if (result.errors.length) throw new Error(result.errors.map(({ path, error }) => `${path}: ${String(error)}`).join("; "));
+			continue;
+		}
 		const agentPath = isGlobal ? agent.global : agent.local;
 		if (agentPath === ".agents/skills/" || agentPath === "~/.agents/skills/")
 			continue;

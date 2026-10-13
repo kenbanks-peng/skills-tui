@@ -21,6 +21,7 @@ export interface AgentConfig {
 	display: string;
 	local: string;
 	global: string;
+	mode?: "symlink" | "copy";
 }
 
 // Repo source — just a url string.
@@ -131,6 +132,7 @@ local = [
 # display = "My Agent"
 # local = ".my-agent/skills/"
 # global = "~/.my-agent/skills/"
+# mode = "copy" # Optional: standalone copies instead of symlinks (default)
 `;
 
 // Ensure config, cache, and state directories exist, seed default config if missing
@@ -181,7 +183,7 @@ export async function loadAgents(): Promise<AgentConfig[]> {
 		// [[custom-agents]] — always enabled, overrides builtins
 		const customAgents: (
 			| string
-			| { name: string; display?: string; local?: string; global?: string }
+			| { name: string; display?: string; local?: string; global?: string; mode?: "symlink" | "copy" }
 		)[] = Array.isArray(config?.["custom-agents"])
 			? config["custom-agents"]
 			: [];

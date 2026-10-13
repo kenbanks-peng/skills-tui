@@ -2,6 +2,7 @@ import { useKeyboard } from "@opentui/react";
 import { useState } from "react";
 import { CommandOutput } from "#components/CommandOutput";
 import type { RepoSource } from "#lib/config";
+import { refreshConfiguredCopies } from "#lib/copy-agent-skills";
 import { formatNewSkillsSummary } from "#lib/skills";
 import { updateArgs } from "#lib/skills-cli";
 import { theme } from "#lib/theme";
@@ -23,7 +24,10 @@ export function Updates({
 }: UpdatesProps) {
 	const [args, setArgs] = useState(() => updateArgs(isGlobal));
 	const [afterCommand] = useState(
-		() => () => formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs),
+		() => async () => {
+			const errors = await refreshConfiguredCopies();
+			return errors + await formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs);
+		},
 	);
 
 	useKeyboard((key) => {

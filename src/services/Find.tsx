@@ -3,6 +3,7 @@ import { useKeyboard } from "@opentui/react";
 import { useState } from "react";
 import { CommandOutput } from "#components/CommandOutput";
 import { findArgs } from "#lib/skills-cli";
+import { refreshConfiguredCopies } from "#lib/copy-agent-skills";
 import { theme } from "#lib/theme";
 
 interface FindProps {
@@ -83,6 +84,7 @@ export function Find({
 				</box>
 			</box>
 			<CommandOutput
+				afterCommand={refreshConfiguredCopies}
 				args={currentArgs}
 				focused={focusedColumn === "output"}
 				onBack={() => {

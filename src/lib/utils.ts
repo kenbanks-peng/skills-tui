@@ -1,5 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { spawnSync } from "#lib/compat";
+import { getBuiltinAgents } from "#lib/agent-registry";
 
 const logPath = "/tmp/skills-tui.log";
 
@@ -40,7 +41,9 @@ export function logCmd(
 // opencode uses the standard .agents/skills path, so including it guarantees
 // the skills CLI writes to .agents/ (the universal location).
 export function ensureOpencode(agents: Iterable<string>): string[] {
-	const list = Array.from(agents);
+	// Custom entries are deployed by Skills TUI, not recognized by the skills CLI.
+	const builtinNames = new Set(getBuiltinAgents().map((agent) => agent.name));
+	const list = Array.from(agents).filter((name) => builtinNames.has(name));
 	if (!list.includes("opencode")) list.push("opencode");
 	return list;
 }

@@ -23,6 +23,7 @@ import {
 import { pruneCache, reconcileRepoCaches } from "#lib/skills";
 import { theme } from "#lib/theme";
 import { syncAgentSkills } from "#lib/sync-agent-skills";
+import { syncCopyAgents } from "#lib/copy-agent-skills";
 import { Find } from "#services/Find";
 import { Updates } from "#services/Updates";
 import { ServiceId, services } from "#services/index";
@@ -322,7 +323,11 @@ export function App() {
 								cacheExpiryMs={cacheExpiryMs}
 								cacheRefreshKey={repoCacheRefreshKey}
 								onFocusSkills={() => setFocusedColumn("content2")}
-								onInstallComplete={() => setRefreshKey((k) => k + 1)}
+								onInstallComplete={() => {
+									const result = syncCopyAgents(agents, selectedAgents);
+									if (result.errors.length) setErrorMessage(result.errors.map(({ path, error }) => `${path}: ${String(error)}`).join("; "));
+									setRefreshKey((k) => k + 1);
+								}}
 								onError={(msg) => {
 									setErrorMessage(msg);
 									setTimeout(() => setErrorMessage(null), 5000);

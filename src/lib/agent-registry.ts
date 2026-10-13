@@ -233,10 +233,10 @@ const registryMap = new Map<string, RegistryEntry>(
 export function resolveAgent(
 	entry:
 		| string
-		| { name: string; display?: string; local?: string; global?: string },
+		| { name: string; display?: string; local?: string; global?: string; mode?: "symlink" | "copy" },
 ): AgentConfig {
 	const name = typeof entry === "string" ? entry : entry.name;
-	const overrides: { display?: string; local?: string; global?: string } =
+	const overrides: { display?: string; local?: string; global?: string; mode?: "symlink" | "copy" } =
 		typeof entry === "string" ? {} : entry;
 	const builtin = registryMap.get(name);
 
@@ -247,7 +247,10 @@ export function resolveAgent(
 	const local = overrides.local ?? builtin?.local ?? STD_LOCAL;
 	const global = overrides.global ?? builtin?.global ?? STD_GLOBAL;
 
-	return { name, display, local, global };
+	if (overrides.mode !== undefined && overrides.mode !== "copy" && overrides.mode !== "symlink") {
+		throw new Error(`Invalid deployment mode for ${name}: ${overrides.mode}`);
+	}
+	return { name, display, local, global, ...(overrides.mode ? { mode: overrides.mode } : {}) };
 }
 
 // Get all builtin agent configs

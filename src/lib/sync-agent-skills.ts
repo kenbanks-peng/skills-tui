@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { AgentConfig, UniversalAgents } from "#lib/config";
+import { syncCopyAgents } from "#lib/copy-agent-skills";
 
 export interface AgentSkillSyncResult {
   added: string[];
@@ -65,6 +66,7 @@ export function syncAgentSkills(
   locations = { home: homedir(), project: process.cwd() },
   universalAgents: UniversalAgents = { both: new Set(), local: new Set() },
 ): AgentSkillSyncResult {
+  if (agent.mode === "copy") return syncCopyAgents(agents, selectedAgents, locations);
   const result: AgentSkillSyncResult = { added: [], removed: [], errors: [] };
   const enabled = selectedAgents.has(agent.name);
 

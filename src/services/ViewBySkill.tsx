@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { agentSkillDirectory } from "#lib/copy-agent-skills";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useState } from "react";
 import { SkillTable } from "#components/SkillTable";
@@ -83,6 +86,7 @@ export function ViewBySkill({
 
 	// Check if an agent has a skill linked (directly or via shared universal path)
 	const isLinked = (skill: InstalledSkillInfo, agent: AgentConfig): boolean => {
+		if (agent.mode === "copy") return existsSync(join(agentSkillDirectory(agent, isGlobal ? "global" : "local"), skill.name, "SKILL.md"));
 		if (skill.agents.has(agent.display)) return true;
 
 		// Universal agents read directly from .agents/skills paths,

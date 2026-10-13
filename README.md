@@ -49,6 +49,30 @@ local = ".my-agent/skills/"
 global = "~/.my-agent/skills/"
 ```
 
+### Standalone copies for mounted configurations
+
+Custom entries default to symlinks into the shared `~/.agents/skills/`
+(User Scope) or `.agents/skills/` (Project Scope). Set `mode = "copy"`
+when the destination must work without access to those paths:
+
+```toml
+[[custom-agents]]
+name = "pi-linux"
+display = "Pi Linux"
+local = ".pi-linux/skills/"
+global = "~/.config/linux/pi/agent/skills/"
+mode = "copy"
+```
+
+The Settings checkbox deploys self-contained copies, including dereferenced
+content symlinks. Copies refresh at startup, after installs/removals, and after
+updates. Disabling removes only copies managed by Skills TUI; independent
+entries are preserved and reported as conflicts. Managed copies contain a
+`.skills-tui-copy.json` ownership marker and are replaced on refresh, so edit
+the source Skill Instance, not the deployed copy. Copy mode takes precedence
+over universal discovery settings. Only paths inside the mounted destination
+are needed by the receiving runtime.
+
 ## Keyboard Controls
 
 | Key | Action |
