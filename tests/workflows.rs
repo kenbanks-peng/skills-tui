@@ -444,3 +444,99 @@ fn cleanup_unlinks_shared_symlinks_without_touching_external_content() {
     assert!(!f.shared(Scope::User, "alpha").exists());
     assert!(outside.join("SKILL.md").is_file());
 }
+
+#[test]
+fn catalog_install_adds_repository_and_only_the_chosen_skill_idempotently() {
+    let f = Fixture::new();
+    f.skill("alpha");
+    f.skill("beta");
+    let config = "# Keep my settings\nrepos = [] # repositories\n[agents]\nenabled = [\"pi\"]\n";
+    fs::write(&f.locations.config, config).unwrap();
+    let mut manager = f.manager();
+    manager.run(Action::Synchronize).unwrap();
+    let action = Action::Install {
+        repo: f.url(),
+        name: "alpha".into(),
+        scope: Scope::Project,
+    };
+    let snapshot = manager.run(action.clone()).unwrap();
+    assert!(snapshot.errors.is_empty(), "{:?}", snapshot.errors);
+    assert!(f.shared(Scope::Project, "alpha").join("SKILL.md").is_file());
+    assert!(!f.shared(Scope::Project, "beta").exists());
+    assert!(!f.shared(Scope::User, "alpha").exists());
+    assert_eq!(snapshot.config.repos, vec![f.url()]);
+    let saved = fs::read_to_string(&f.locations.config).unwrap();
+    assert!(saved.contains("# Keep my settings"));
+    assert!(saved.contains("# repositories"));
+    let snapshot = manager.run(action).unwrap();
+    assert!(snapshot.errors.is_empty());
+    assert_eq!(
+        snapshot
+            .selections
+            .get(Scope::Project, &f.locations.project)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(f.shared(Scope::Project, "alpha").is_dir());
+    assert_eq!(fs::read_to_string(&f.locations.config).unwrap(), saved);
+}
+
+#[test]
+fn failed_catalog_install_does_not_change_configuration_or_selections() {
+    let f = Fixture::new();
+    fs::write(&f.locations.config, "repos = []\n").unwrap();
+    let mut manager = f.manager();
+    manager.run(Action::Synchronize).unwrap();
+    let original_config = fs::read(&f.locations.config).unwrap();
+    let original_selections = fs::read(f.locations.state.join("skill-selections.toml")).unwrap();
+    assert!(
+        manager
+            .run(Action::Install {
+                repo: f.url(),
+                name: "absent".into(),
+                scope: Scope::User
+            })
+            .is_err()
+    );
+    assert_eq!(fs::read(&f.locations.config).unwrap(), original_config);
+    assert_eq!(
+        fs::read(f.locations.state.join("skill-selections.toml")).unwrap(),
+        original_selections
+    );
+}
+
+#[test]
+fn catalog_install_does_not_replace_a_skill_selected_from_another_repository() {
+    let f = Fixture::new();
+    f.skill("alpha");
+    f.select(Scope::User, &["alpha"]);
+    let mut manager = f.manager();
+    manager.run(Action::Synchronize).unwrap();
+    let other = f.repo.parent().unwrap().join("other-repository");
+    skill(&other.join("alpha"), "alpha");
+    let repo = url::Url::from_directory_path(other).unwrap().to_string();
+    let original_config = fs::read(&f.locations.config).unwrap();
+    let original_content = fs::read(f.shared(Scope::User, "alpha").join("SKILL.md")).unwrap();
+    let error = manager
+        .run(Action::Install {
+            repo,
+            name: "alpha".into(),
+            scope: Scope::User,
+        })
+        .unwrap_err();
+    assert!(error.to_string().contains("Another selected repository"));
+    assert_eq!(fs::read(&f.locations.config).unwrap(), original_config);
+    assert_eq!(
+        fs::read(f.shared(Scope::User, "alpha").join("SKILL.md")).unwrap(),
+        original_content
+    );
+    assert_eq!(
+        Selections::load(&f.locations)
+            .unwrap()
+            .get(Scope::User, &f.locations.project)
+            .unwrap()[0]
+            .repo,
+        f.url()
+    );
+}

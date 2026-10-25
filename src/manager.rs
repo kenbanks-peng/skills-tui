@@ -19,6 +19,12 @@ pub enum Action {
         scope: Scope,
     },
     ToggleAgent(String),
+    /// Explicit install from Find. Adds the repository only after validation.
+    Install {
+        repo: String,
+        name: String,
+        scope: Scope,
+    },
 }
 #[derive(Clone, Debug)]
 pub struct Snapshot {
@@ -52,7 +58,18 @@ impl Manager {
     }
     pub fn run(&mut self, action: Action) -> Result<Snapshot> {
         let original = fs::read(&self.locations.config)?;
-        let config = Config::load(&self.locations.config)?;
+        let mut config = Config::load(&self.locations.config)?;
+        let new_repository = if let Action::Install { repo, name, .. } = &action {
+            ensure!(files::safe_name(name), "Invalid Skill name");
+            if config.repos.contains(repo) {
+                None
+            } else {
+                config.repos.push(repo.clone());
+                Some(repo.clone())
+            }
+        } else {
+            None
+        };
         // Validate all saved intent before making any filesystem change.
         let mut selections = Selections::load(&self.locations)?;
         let mut disabled = state::load_disabled(&self.locations)?;
@@ -67,6 +84,16 @@ impl Manager {
             fs::read(&self.locations.config)? == original,
             "Configuration changed during repository checks; retry"
         );
+        if let Action::Install { repo, name, .. } = &action {
+            ensure!(
+                inventory
+                    .repos
+                    .get(repo)
+                    .is_some_and(|skills| skills.iter().any(|skill| skill.name == *name)),
+                "Cannot install {name}: repository check failed or Skill is absent. {}",
+                inventory.errors.join(" | ")
+            );
+        }
         let mut errors = inventory.errors.clone();
         for scope in [Scope::User, Scope::Project] {
             if selections.get(scope, &self.locations.project).is_some() {
@@ -138,6 +165,25 @@ impl Manager {
             }
             selections.set(*scope, &self.locations.project, selected)?;
         }
+        if let Action::Install { repo, name, scope } = &action {
+            let mut selected = selections
+                .get(*scope, &self.locations.project)
+                .cloned()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Cannot adopt selections until all repositories are available")
+                })?;
+            ensure!(
+                !selected.iter().any(|s| s.name == *name && s.repo != *repo),
+                "Another selected repository has this Skill name"
+            );
+            if !selected.iter().any(|s| s.name == *name && s.repo == *repo) {
+                selected.push(Selection {
+                    repo: repo.clone(),
+                    name: name.clone(),
+                });
+            }
+            selections.set(*scope, &self.locations.project, selected)?;
+        }
         if let Action::ToggleAgent(name) = &action {
             ensure!(
                 config.agents.iter().any(|a| a.name == *name),
@@ -162,6 +208,19 @@ impl Manager {
                         .is_none_or(|skills| skills.iter().any(|skill| skill.name == s.name))
             });
             selections.set(scope, &self.locations.project, selected)?;
+        }
+        if let Some(repo) = new_repository {
+            // Find is an explicit configuration change, not routine synchronization.
+            let mut document = std::str::from_utf8(&original)?.parse::<toml_edit::DocumentMut>()?;
+            document["repos"]
+                .as_array_mut()
+                .ok_or_else(|| anyhow::anyhow!("repos must be an array"))?
+                .push(repo);
+            ensure!(
+                fs::read(&self.locations.config)? == original,
+                "Configuration changed during installation; retry"
+            );
+            files::atomic_write(&self.locations.config, document.to_string().as_bytes())?;
         }
         // Save intent before touching deployed content.
         selections.save(&self.locations)?;

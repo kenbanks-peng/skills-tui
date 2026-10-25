@@ -1,6 +1,8 @@
+mod find;
+
 use crate::{
     config::{Config, Locations, Scope},
-    files,
+    deployment, files,
     manager::{Action, Manager, Snapshot},
     repository::Skill,
     state::{self, Selections},
@@ -12,7 +14,10 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Wrap},
+    widgets::{
+        Block, BorderType, Borders, Cell, List, ListItem, ListState, Padding, Paragraph,
+        Row as TableRow, Table, TableState, Wrap,
+    },
 };
 use std::{fs, io::IsTerminal, sync::mpsc, thread, time::Duration};
 
@@ -34,6 +39,7 @@ enum Focus {
     Skills,
     Search,
     Settings,
+    Query,
 }
 #[derive(Clone)]
 struct Row {
@@ -56,6 +62,8 @@ pub struct App {
     busy: bool,
     status: String,
     output_scroll: u16,
+    find: find::Find,
+    installing: Option<(String, Scope)>,
 }
 impl App {
     fn new(locations: Locations) -> Result<Self> {
@@ -81,6 +89,8 @@ impl App {
             busy: true,
             status: "Synchronizing skills in background...".into(),
             output_scroll: 0,
+            find: find::Find::default(),
+            installing: None,
         })
     }
     fn rows(&self) -> Vec<Row> {
@@ -133,6 +143,9 @@ impl App {
         }
         let filter = self.filter.to_lowercase();
         rows.retain(|r| {
+            if self.service == 1 {
+                return r.name.to_lowercase().contains(&filter);
+            }
             format!("{} {} {}", r.name, r.repo, r.description)
                 .to_lowercase()
                 .contains(&filter)
@@ -154,8 +167,11 @@ impl App {
         if self.service == 0 {
             order.push(Focus::Repos);
         }
+        if self.service == 2 {
+            order.push(Focus::Query);
+        }
         order.push(Focus::Skills);
-        if self.service != 3 {
+        if self.service < 2 {
             order.push(Focus::Search);
         }
         order.push(Focus::Settings);
@@ -176,7 +192,12 @@ impl App {
             self.status = "Wait for the current operation to finish.".into();
             return;
         }
+        let installing = match &action {
+            Action::Install { name, scope, .. } => Some((name.clone(), *scope)),
+            _ => None,
+        };
         if sender.send(action).is_ok() {
+            self.installing = installing;
             self.busy = true;
             self.status = "Synchronizing skills in background...".into();
         } else {
@@ -200,6 +221,18 @@ impl App {
                 return false;
             }
             KeyCode::Esc => {
+                if self.service == 2 && matches!(self.focus, Focus::Query | Focus::Skills) {
+                    if self.find.searching() {
+                        self.find.cancel();
+                    } else {
+                        self.focus = if self.focus == Focus::Skills {
+                            Focus::Query
+                        } else {
+                            Focus::Services
+                        };
+                    }
+                    return false;
+                }
                 if !self.filter.is_empty() {
                     self.filter.clear();
                     self.skill_index = 0;
@@ -208,6 +241,46 @@ impl App {
                 return true;
             }
             _ => {}
+        }
+        if self.service == 2 && self.focus == Focus::Query {
+            self.find.edit(key);
+            return false;
+        }
+        if self.service == 2 && self.focus == Focus::Skills {
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') => self.find.move_index(false, 1),
+                KeyCode::Down | KeyCode::Char('j') => self.find.move_index(true, 1),
+                KeyCode::PageUp => self.find.move_index(false, 10),
+                KeyCode::PageDown => self.find.move_index(true, 10),
+                KeyCode::Enter => {
+                    if let Some(skill) = self.find.results.get(self.find.index)
+                        && let Some(repo) = skill.repository()
+                    {
+                        let already_selected = self
+                            .snapshot
+                            .selections
+                            .get(self.scope, &self.locations.project)
+                            .is_some_and(|values| {
+                                values
+                                    .iter()
+                                    .any(|s| s.repo == repo && s.name == skill.name)
+                            });
+                        if !already_selected {
+                            let action = Action::Install {
+                                repo: repo.into(),
+                                name: skill.name.clone(),
+                                scope: self.scope,
+                            };
+                            self.send(sender, action);
+                        }
+                    }
+                }
+                KeyCode::Char('/') => self.focus = Focus::Query,
+                KeyCode::Char('g') => self.scope = self.scope.toggle(),
+                KeyCode::Char('q') => return true,
+                _ => {}
+            }
+            return false;
         }
         if self.focus == Focus::Search {
             match key.code {
@@ -236,7 +309,7 @@ impl App {
                 self.scope = self.scope.toggle();
                 self.skill_index = 0;
             }
-            KeyCode::Char('/') if self.service != 3 => {
+            KeyCode::Char('/') if self.service < 2 => {
                 self.focus = Focus::Search;
             }
             KeyCode::Char('r') => {
@@ -265,7 +338,7 @@ impl App {
                     self.focus = if self.service == 0 {
                         Focus::Repos
                     } else if self.service == 2 {
-                        Focus::Search
+                        Focus::Query
                     } else {
                         Focus::Skills
                     };
@@ -274,6 +347,7 @@ impl App {
                     self.focus = Focus::Skills;
                 }
                 Focus::Skills if self.service == 3 => self.send(sender, Action::Update(self.scope)),
+                Focus::Skills if self.service == 1 => {}
                 Focus::Skills => {
                     if let Some(row) = self.rows().get(self.skill_index).cloned() {
                         if row.repo.is_empty() {
@@ -397,12 +471,32 @@ impl App {
                     )),
                 columns[1],
             );
+        } else if self.service == 1 {
+            self.draw_installed(frame, columns[1]);
+        } else if self.service == 2 {
+            self.find.draw(
+                frame,
+                columns[1],
+                self.focus,
+                |skill| {
+                    self.snapshot
+                        .selections
+                        .get(self.scope, &self.locations.project)
+                        .is_some_and(|selections| {
+                            selections.iter().any(|s| {
+                                Some(s.repo.as_str()) == skill.repository() && s.name == skill.name
+                            })
+                        })
+                },
+                self.scope.label(),
+                self.busy,
+            );
         } else {
             self.draw_skills(frame, columns[1]);
         }
-        draw_footer(frame, outer[1]);
+        draw_footer(frame, outer[1], self.service, self.focus);
         let footer = outer[1];
-        let filter_disabled = self.service == 3;
+        let filter_disabled = self.service >= 2;
         let search = if filter_disabled {
             String::new()
         } else if self.filter.is_empty() {
@@ -425,8 +519,14 @@ impl App {
                 ),
             side[1],
         );
+        let installing_message = self
+            .installing
+            .as_ref()
+            .map(|(name, scope)| format!("Installing {name} in {}…", scope.label()));
         let message = if self.busy {
-            "Synchronizing skills in background..."
+            installing_message
+                .as_deref()
+                .unwrap_or("Synchronizing skills in background...")
         } else if self.status.starts_with("Synchronized.") {
             ""
         } else {
@@ -519,6 +619,73 @@ impl App {
                 inner.width,
                 inner.height.saturating_sub(2),
             ),
+            &mut state,
+        );
+    }
+    fn draw_installed(&self, frame: &mut Frame, area: Rect) {
+        let block = panel("Installed", self.focus == Focus::Skills);
+        let rows = self.rows();
+        if rows.is_empty() {
+            frame.render_widget(
+                Paragraph::new(if self.filter.is_empty() {
+                    "No skills installed"
+                } else {
+                    "No skills match filter"
+                })
+                .style(Style::default().fg(MUTED))
+                .block(block),
+                area,
+            );
+            return;
+        }
+        let agents = self
+            .snapshot
+            .config
+            .agents
+            .iter()
+            .filter(|agent| !self.snapshot.disabled.contains(&agent.name))
+            .collect::<Vec<_>>();
+        let mut header = vec![Cell::from("Skill")];
+        header.extend(agents.iter().map(|agent| Cell::from(agent.display.clone())));
+        let mut widths = vec![Constraint::Min(16)];
+        widths.extend(agents.iter().map(|agent| {
+            Constraint::Length(
+                (agent.display.chars().count().max(6) + 2).min(u16::MAX as usize) as u16,
+            )
+        }));
+        let items = rows
+            .iter()
+            .map(|row| {
+                let mut cells = vec![Cell::from(row.name.clone())];
+                cells.extend(agents.iter().map(|agent| {
+                    let visible = deployment::visible(
+                        agent,
+                        &self.snapshot.config,
+                        &self.locations,
+                        self.scope,
+                        &row.name,
+                    );
+                    Cell::from(if visible { "✓" } else { "·" })
+                        .style(Style::default().fg(if visible { GREEN } else { MUTED }))
+                }));
+                TableRow::new(cells)
+            })
+            .collect::<Vec<_>>();
+        let mut state = TableState::default().with_selected(Some(self.skill_index));
+        frame.render_stateful_widget(
+            Table::new(items, widths)
+                .header(
+                    TableRow::new(header)
+                        .style(Style::default().fg(LAVENDER).bold())
+                        .bottom_margin(1),
+                )
+                .row_highlight_style(if self.focus == Focus::Skills {
+                    Style::default().bg(Color::Rgb(69, 71, 90)).fg(YELLOW)
+                } else {
+                    Style::default()
+                })
+                .block(block),
+            area,
             &mut state,
         );
     }
@@ -774,7 +941,7 @@ fn preview_lines(name: &str, path: &str, content: Option<&str>) -> Vec<Line<'sta
     }
     lines
 }
-fn draw_footer(frame: &mut Frame, area: Rect) {
+fn draw_footer(frame: &mut Frame, area: Rect, service: usize, focus: Focus) {
     let block = Block::bordered().border_style(Style::default().fg(Color::Rgb(69, 71, 90)));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -799,15 +966,34 @@ fn draw_footer(frame: &mut Frame, area: Rect) {
         Rect::new(inner.x + 1, inner.y + 2, inner.width.saturating_sub(1), 1),
     );
     let mut spans = Vec::new();
-    for (i, (label, key)) in [
-        ("Navigate: ", "Tab/Arrows"),
-        ("Select: ", "Enter"),
-        ("Toggle: ", "Space"),
-        ("Quit: ", "Esc"),
-    ]
-    .iter()
-    .enumerate()
-    {
+    let actions = match service {
+        1 => [
+            ("Navigate: ", "Tab/Arrows"),
+            ("Filter: ", "/"),
+            ("Scope: ", "g"),
+            ("Quit: ", "Esc"),
+        ],
+        2 => [
+            ("Navigate: ", "Tab/Arrows"),
+            (
+                if focus == Focus::Query {
+                    "Search: "
+                } else {
+                    "Install: "
+                },
+                "Enter",
+            ),
+            ("Scope: ", "g (results)"),
+            ("Back: ", "Esc"),
+        ],
+        _ => [
+            ("Navigate: ", "Tab/Arrows"),
+            ("Select: ", "Enter"),
+            ("Toggle: ", "Space"),
+            ("Quit: ", "Esc"),
+        ],
+    };
+    for (i, (label, key)) in actions.iter().enumerate() {
         if i > 0 {
             spans.push(Span::raw("   "));
         }
@@ -863,11 +1049,16 @@ pub fn run(manager: Manager) -> Result<()> {
                 match result {
                     Ok(snapshot) => {
                         app.status = if snapshot.errors.is_empty() {
-                            format!(
-                                "Synchronized. {} Skill Instances changed.",
-                                snapshot.changed
-                            )
+                            if let Some((name, scope)) = app.installing.take() {
+                                format!("Installed {name} in {}.", scope.label())
+                            } else {
+                                format!(
+                                    "Synchronized. {} Skill Instances changed.",
+                                    snapshot.changed
+                                )
+                            }
                         } else {
+                            app.installing = None;
                             snapshot.errors.join(" | ")
                         };
                         app.snapshot = snapshot;
@@ -877,9 +1068,13 @@ pub fn run(manager: Manager) -> Result<()> {
                         app.skill_index = app.skill_index.min(app.rows().len().saturating_sub(1));
                         app.setting_index = app.setting_index.min(app.snapshot.config.agents.len());
                     }
-                    Err(error) => app.status = format!("{error:#}"),
+                    Err(error) => {
+                        app.installing = None;
+                        app.status = format!("{error:#}");
+                    }
                 }
             }
+            app.find.poll();
             terminal.draw(|f| app.draw(f))?;
             if event::poll(Duration::from_millis(100))?
                 && let Event::Key(key) = event::read()?
@@ -1092,6 +1287,78 @@ mod tests {
             let actual = (2..23).map(|x| buffer[(x, y)].symbol()).collect::<String>();
             assert_eq!(actual, expected);
         }
+    }
+
+    #[test]
+    fn installed_view_is_a_read_only_agent_visibility_table() {
+        let (_temp, mut app) = app();
+        app.service = 1;
+        app.focus = Focus::Skills;
+        let path = app.locations.shared(Scope::User).join("example");
+        fs::create_dir_all(&path).unwrap();
+        fs::write(path.join("SKILL.md"), "# Example").unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(206, 46)).unwrap();
+        terminal.draw(|f| app.draw(f)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let text: String = (0..40)
+            .flat_map(|y| (29..206).map(move |x| buffer[(x, y)].symbol()))
+            .collect();
+        assert!(text.contains("Installed"));
+        assert!(text.contains("Skill"));
+        assert!(text.contains("Claude Code"));
+        assert!(text.contains("example"));
+        assert!(text.contains("✓"));
+        assert!(!text.contains("Preview"));
+        let (tx, rx) = mpsc::channel();
+        for key in [KeyCode::Enter, KeyCode::Char(' ')] {
+            app.key(KeyEvent::new(key, KeyModifiers::NONE), &tx);
+        }
+        assert!(rx.try_recv().is_err());
+        assert!(path.join("SKILL.md").is_file());
+    }
+
+    #[test]
+    fn find_query_captures_command_keys_and_result_installs_in_selected_scope() {
+        let (_temp, mut app) = app();
+        app.service = 2;
+        app.focus = Focus::Query;
+        app.busy = false;
+        let (tx, rx) = mpsc::channel();
+        for c in "g q r".chars() {
+            assert!(!app.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE), &tx));
+        }
+        assert_eq!(app.find.query, "g q r");
+        assert_eq!(app.scope, Scope::User);
+        assert!(rx.try_recv().is_err());
+        app.scope = Scope::Project;
+        app.focus = Focus::Skills;
+        app.find.results = vec![crate::catalog::SearchSkill {
+            id: "owner/repo/example".into(),
+            name: "example".into(),
+            source: "owner/repo".into(),
+            installs: 42,
+        }];
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &tx);
+        assert!(
+            matches!(rx.try_recv().unwrap(), Action::Install { repo, name, scope: Scope::Project } if repo == "owner/repo" && name == "example")
+        );
+        app.busy = false;
+        app.snapshot
+            .selections
+            .set(
+                Scope::Project,
+                &app.locations.project,
+                vec![crate::state::Selection {
+                    repo: "owner/repo".into(),
+                    name: "example".into(),
+                }],
+            )
+            .unwrap();
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &tx);
+        assert!(rx.try_recv().is_err());
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &tx);
+        assert_eq!(app.focus, Focus::Query);
+        assert!(!app.focus_order().contains(&Focus::Search));
     }
 
     #[test]
