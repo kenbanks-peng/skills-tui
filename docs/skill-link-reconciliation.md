@@ -1,46 +1,91 @@
-# Startup skill update and link reconciliation
+# Skill selection and synchronization
 
-Before it opens the interface, Skills TUI updates all lock-tracked skills in User Scope and Project Scope to their latest upstream revisions. No confirmation is required. A failure in one scope does not prevent an update in the other scope or prevent the interface from opening. The pinned `skills` CLI version controls update behavior; skill revisions are not pinned.
+Skills TUI config is the source of truth for selected skills. Skills TUI does not
+read or change another tool's lock files. The skills CLI is used to list remote
+repository skills and install explicitly named skills, not to determine selections.
 
-After the updates, Skills TUI reconciles deployed skills and skill links once. It does not run this cleanup on a timer, on scope changes, or after install/remove/update actions.
+## Existing selections
 
-First, Skills TUI computes the enabled User Scope skills from the configured repositories and the skills CLI user lock. It removes every other immediate folder from `~/.agents/skills/`. A missing or malformed lock enables no lock-tracked skills. Skills in configured `file://` repositories remain enabled. Regular files and symlinks are not skill folders and remain unchanged. This check does not change the lock file.
+On the first successful synchronization of each scope, existing installed skills
+that still exist in a configured repository become the initial selections.
+Unselected repository skills are not installed. All configured repositories must
+be checked successfully before first-run adoption can remove any content.
 
-Then, the link check covers both User Scope and Project Scope for all agents loaded from `config.toml`, including custom agents and agents unchecked in Settings. Project Scope means the current working directory.
+If an installed name exists in multiple configured repositories, adoption stops
+for that scope and reports the conflict. Set the repository explicitly in the
+selection config below, including all skills you want to keep. Skills TUI does
+not guess which repository supplied that Skill Instance.
 
-Only immediate symlink entries in configured agent Skill Locations are checked. A link can be removed only when its target is missing and its resolved target path is inside the matching shared directory:
+## Configuration
 
-- User Scope: `~/.agents/skills/`
-- Project Scope: `<project>/.agents/skills/`
+Selections are saved in `~/.config/skills-tui/config.toml`. User Scope and each
+Project Scope have separate lists. A missing list means adoption has not completed;
+an empty list means no skills are selected.
 
-Relative link targets are resolved from the physical parent directory, after following directory symlinks. This supports agent folders linked into a dotfiles repository. Existing path aliases are resolved before the scope check. The link check leaves live links, unrelated targets, regular files, directories, and nested skill content unchanged. It does not change lock files or reinstall skills.
+```toml
+repos = ["owner/repo"]
 
-The link and target are checked again before removal. Missing locations are skipped. Other filesystem errors are reported at startup; they do not count as proof that a target is missing. Cleanup continues at other entries and locations.
+[skills]
+user = [{ repo = "owner/repo", name = "example" }]
 
-A skill removed manually while the TUI is open leaves its dead links until the next startup.
+[skills.projects]
+"/absolute/path/to/project" = [{ repo = "owner/repo", name = "example" }]
+```
 
-## Agent selection synchronization
+The TUI saves install/remove selections immediately. Other config sections and
+their comments remain unchanged. Project Scope means the current working directory;
+other projects are not modified.
 
-Changing an agent checkbox in Settings synchronizes that agent's links immediately
-in User Scope and the current Project Scope, regardless of the displayed scope.
-Scopes supported by the agent in `[agents.universal]` are skipped before any
-filesystem access: `both` skips both scopes; `local` skips Project Scope only.
-These agents already discover skills from the shared location, even if their
-registry entry also lists an agent-specific Skill Location.
-For other scopes, enabling backfills links for existing shared Skill Instances
-containing a `SKILL.md`. Disabling removes that agent's immediate links to those shared
-instances, including dead links. Shared skill content and lock files are unchanged.
-This is separate from startup cleanup and does not download or reinstall skills.
+## Reconciliation
 
-Independent agent copies and unrelated links remain unchanged. An existing
-conflicting entry is reported in the interface rather than overwritten.
-Synchronization continues for other entries and scopes after an error; the
-selection is still saved. Toggling off and on retries backfilling after resolving
-a conflict. The Installed view reloads after synchronization.
+Synchronization runs before the interface opens, after skill selections change,
+and every 30 seconds while the interface is open. The Check/Update action also
+synchronizes the displayed scope.
 
-A location still used by another selected agent is preserved. The shared
-`.agents/skills` location itself is never removed. Agents configured to read
-shared locations directly (such as OpenCode and Pi) can therefore retain Agent
-Visibility even when unchecked. Selection is not an access-control boundary.
+For each scope, Skills TUI:
+- Keeps selected skills that still exist in their configured repository.
+- Restores selected Skill Instances whose shared folders are missing.
+- Removes selections and shared folders when their repository is no longer
+  configured or a successful repository check confirms the skill is absent.
+- Removes unselected immediate folders and symlinks from the shared Skill Location.
+  Regular files and nested content of retained skills remain unchanged.
+- Synchronizes agent links and managed standalone copies.
 
-Run the isolated filesystem tests with `pnpm test`. Tests use temporary folders, not live Skill Locations.
+The shared Skill Locations are `~/.agents/skills/` in User Scope and
+`<project>/.agents/skills/` in Project Scope. Do not use them to store independent,
+unselected skills: they are managed by Skills TUI.
+
+Startup and Check/Update reinstall selected skills from their current upstream
+content. The 30-second checks repair missing content and detect removed skills;
+they do not replace intact selected folders on every check. Failed installations
+remain selected and are retried on the next check. Edit repository content rather
+than deployed copies, because an update replaces deployed content.
+
+A failed or incomplete repository check preserves that repository's selections
+and content. It is not proof of deletion. Malformed selection config prevents
+cleanup. Errors are reported; other repositories and entries can still synchronize.
+Configuration changes during repository checks cause the pass to stop and retry
+on the next check rather than apply an old selection snapshot.
+
+## Agent Visibility
+
+Agent checkboxes control links or copies, not shared skill selections. Changing
+a checkbox applies to both scopes. Enabling an agent creates links to existing
+shared Skill Instances; disabling removes its links, including dead links.
+
+Independent agent entries and unrelated links remain unchanged. Conflicts are
+reported rather than overwritten. Locations shared with another selected agent
+are preserved.
+
+Agents configured to discover the shared location directly need no links.
+Unchecking them cannot prevent Agent Visibility. Copy mode instead deploys
+self-contained managed copies, even for agents with shared discovery.
+
+Dead-link cleanup checks immediate symlinks for all configured agents in both
+scopes. Only missing targets inside the matching shared Skill Location qualify.
+Relative targets are resolved from the physical parent directory, including
+dotfiles directory aliases. Filesystem errors are not proof of missing targets.
+Links and targets are checked again before removal.
+
+Run `pnpm test` for isolated tests. Tests use temporary folders, not live Skill
+Locations.

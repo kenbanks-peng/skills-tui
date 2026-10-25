@@ -41,8 +41,9 @@ export function spawn(
 		stderr: proc.stderr,
 		stdin: proc.stdin,
 		kill: () => proc.kill(),
-		exited: new Promise<number>((resolve) => {
-			proc.on("exit", (code) => resolve(code ?? 1));
+		exited: new Promise<number>((resolve, reject) => {
+			proc.once("error", reject);
+			proc.once("exit", (code) => resolve(code ?? 1));
 		}),
 	};
 }

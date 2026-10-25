@@ -58,7 +58,7 @@ function agentDirectory(
 
 // Selection is persisted across scopes, so toggle synchronization covers User
 // Scope and the current Project Scope. Only agent links change, never shared
-// Skill Instances, locks, independent copies, or unrelated links.
+// Skill Instances, independent copies, or unrelated links.
 export function syncAgentSkills(
   agent: AgentConfig,
   agents: AgentConfig[],

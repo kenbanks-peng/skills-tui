@@ -7,7 +7,7 @@ import { SkillTable } from "#components/SkillTable";
 import { useScrollableList } from "#hooks/useScrollableList";
 import type { AgentConfig, UniversalAgents } from "#lib/config";
 import type { InstalledSkillInfo } from "#lib/skills";
-import { parseInstalledSkills } from "#lib/skills";
+import { listInstalledSkills } from "#lib/skills";
 import { theme } from "#lib/theme";
 import { viewportHeight } from "#lib/utils";
 
@@ -37,17 +37,22 @@ export function ViewBySkill({
 	const [loading, setLoading] = useState(false);
 
 	useEffect(() => {
-		if (agents.length > 0) {
-			setLoading(true);
-			const agentNames = agents
-				.filter((a) => selectedAgents.has(a.name))
-				.map((a) => a.name);
-			parseInstalledSkills(isGlobal, agentNames).then((skills) => {
-				setInstalledSkills(skills);
-				setLoading(false);
+		let active = true;
+		setLoading(true);
+		listInstalledSkills(isGlobal)
+			.then((skills) => {
+				if (active) setInstalledSkills(skills);
+			})
+			.catch(() => {
+				if (active) setInstalledSkills([]);
+			})
+			.finally(() => {
+				if (active) setLoading(false);
 			});
-		}
-	}, [isGlobal, selectedAgents, agents, refreshKey]);
+		return () => {
+			active = false;
+		};
+	}, [isGlobal, refreshKey]);
 
 	const lowerFilter = searchFilter.toLowerCase();
 	const filteredSkills = searchFilter
@@ -86,8 +91,24 @@ export function ViewBySkill({
 
 	// Check if an agent has a skill linked (directly or via shared universal path)
 	const isLinked = (skill: InstalledSkillInfo, agent: AgentConfig): boolean => {
-		if (agent.mode === "copy") return existsSync(join(agentSkillDirectory(agent, isGlobal ? "global" : "local"), skill.name, "SKILL.md"));
-		if (skill.agents.has(agent.display)) return true;
+		if (agent.mode === "copy")
+			return existsSync(
+				join(
+					agentSkillDirectory(agent, isGlobal ? "global" : "local"),
+					skill.name,
+					"SKILL.md",
+				),
+			);
+		if (
+			existsSync(
+				join(
+					agentSkillDirectory(agent, isGlobal ? "global" : "local"),
+					skill.name,
+					"SKILL.md",
+				),
+			)
+		)
+			return true;
 
 		// Universal agents read directly from .agents/skills paths,
 		// so any skill located there is visible to them regardless of

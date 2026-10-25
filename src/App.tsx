@@ -20,10 +20,10 @@ import {
 	saveDisabledAgents,
 	type UniversalAgents,
 } from "#lib/config";
-import { pruneCache, reconcileRepoCaches } from "#lib/skills";
+import { pruneCache } from "#lib/skills";
+import { synchronizeConfiguredSkills } from "#lib/configured-skills";
 import { theme } from "#lib/theme";
 import { syncAgentSkills } from "#lib/sync-agent-skills";
-import { syncCopyAgents } from "#lib/copy-agent-skills";
 import { Find } from "#services/Find";
 import { Updates } from "#services/Updates";
 import { ServiceId, services } from "#services/index";
@@ -77,16 +77,69 @@ export function App() {
 				setCacheExpiryMs(expiryMs);
 				setRepos(repoList);
 
-				// Do not delay the TUI. Refresh existing caches in the background,
-				// then reload repository views from the reconciled cache. Reconcile
-				// before pruning so installed skills survive an expired cache.
-				void reconcileRepoCaches(repoList).finally(() => {
-					pruneCache(repoList, expiryMs);
-					setRepoCacheRefreshKey((key) => key + 1);
-				});
+				pruneCache(repoList, expiryMs);
 			},
 		);
 		loadUniversalAgents().then(setUniversalAgents);
+	}, []);
+
+	// Repair external filesystem/config changes while the TUI remains open.
+	// Each pass is serialized with install/remove/update actions.
+	useEffect(() => {
+		let active = true;
+		let running = false;
+		const timer = setInterval(async () => {
+			if (running) return;
+			running = true;
+			try {
+				const result = await synchronizeConfiguredSkills();
+				const [repoList, agentList, disabled, universal] = await Promise.all([
+					loadRepos(),
+					loadAgents(),
+					loadDisabledAgents(),
+					loadUniversalAgents(),
+				]);
+				if (!active) return;
+				setAgents((previous) =>
+					JSON.stringify(previous) === JSON.stringify(agentList)
+						? previous
+						: agentList,
+				);
+				const selected = new Set(
+					agentList
+						.filter((agent) => !disabled.has(agent.name))
+						.map((agent) => agent.name),
+				);
+				setSelectedAgents((previous) =>
+					previous.size === selected.size &&
+					[...previous].every((name) => selected.has(name))
+						? previous
+						: selected,
+				);
+				setUniversalAgents(universal);
+				setRepos((previous) =>
+					JSON.stringify(previous) === JSON.stringify(repoList)
+						? previous
+						: repoList,
+				);
+				setRefreshKey((key) => key + 1);
+				setRepoCacheRefreshKey((key) => key + 1);
+				if (result.errors.length)
+					setErrorMessage(
+						result.errors
+							.map(({ path, error }) => `${path}: ${String(error)}`)
+							.join("; "),
+					);
+			} catch (error) {
+				if (active) setErrorMessage(String(error));
+			} finally {
+				running = false;
+			}
+		}, 30_000);
+		return () => {
+			active = false;
+			clearInterval(timer);
+		};
 	}, []);
 
 	const hasContent2 =
@@ -277,7 +330,13 @@ export function App() {
 							const next = new Set(selectedAgents);
 							if (next.has(name)) next.delete(name);
 							else next.add(name);
-							const result = syncAgentSkills(agent, agents, next, undefined, universalAgents);
+							const result = syncAgentSkills(
+								agent,
+								agents,
+								next,
+								undefined,
+								universalAgents,
+							);
 							setSelectedAgents(next);
 							setRefreshKey((key) => key + 1);
 							if (result.errors.length > 0) {
@@ -291,7 +350,9 @@ export function App() {
 								agents.filter((a) => !next.has(a.name)).map((a) => a.name),
 							);
 							void saveDisabledAgents(disabled).catch((error) => {
-								setErrorMessage(`Could not save agent settings: ${String(error)}`);
+								setErrorMessage(
+									`Could not save agent settings: ${String(error)}`,
+								);
 							});
 						}}
 						onActiveIndexChange={setActiveSettingIndex}
@@ -318,15 +379,12 @@ export function App() {
 								focusedColumn={repoFocusedColumn}
 								repos={repos}
 								isGlobal={isGlobal}
-								agents={agents}
-								selectedAgents={selectedAgents}
 								cacheExpiryMs={cacheExpiryMs}
 								cacheRefreshKey={repoCacheRefreshKey}
 								onFocusSkills={() => setFocusedColumn("content2")}
 								onInstallComplete={() => {
-									const result = syncCopyAgents(agents, selectedAgents);
-									if (result.errors.length) setErrorMessage(result.errors.map(({ path, error }) => `${path}: ${String(error)}`).join("; "));
 									setRefreshKey((k) => k + 1);
+									setRepoCacheRefreshKey((key) => key + 1);
 								}}
 								onError={(msg) => {
 									setErrorMessage(msg);
@@ -349,10 +407,15 @@ export function App() {
 
 						{selectedServiceId === ServiceId.UPDATE && (
 							<Updates
+								key={isGlobal ? "user" : "project"}
 								focused={contentFocus}
 								repos={repos}
 								isGlobal={isGlobal}
 								cacheExpiryMs={cacheExpiryMs}
+								onUpdateComplete={() => {
+									setRefreshKey((key) => key + 1);
+									setRepoCacheRefreshKey((key) => key + 1);
+								}}
 								onBack={() => setFocusedColumn("services")}
 							/>
 						)}

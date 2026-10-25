@@ -1,20 +1,11 @@
-import {
-	cpSync,
-	lstatSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	symlinkSync,
-	unlinkSync,
-} from "node:fs";
+import { readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { existsSync, readTextFile, writeTextFile } from "#lib/compat";
-import type { AgentConfig, RepoSource } from "#lib/config";
-import { cacheDir } from "#lib/config";
-import { syncCopiedSkills } from "#lib/copy-agent-skills";
-import { listRepoSkills, listSkills } from "#lib/skills-cli";
+import type { RepoSource } from "#lib/config";
+import { cacheDir, configPath } from "#lib/config";
+import { SkillSelectionStore } from "#lib/skill-management";
+import { inspectRepoSkills, listRepoSkills } from "#lib/skills-cli";
 import {
 	fileUrlToPath,
 	isFileRepo,
@@ -22,68 +13,28 @@ import {
 	stripAnsi,
 } from "#lib/utils";
 
-// Installed skill info: skill name -> set of agent names
+// Concrete shared Skill Instances, independent of saved selection intent.
 export interface InstalledSkillInfo {
 	name: string;
 	path: string;
-	agents: Set<string>;
 }
 
-function normalizeRepoSource(repo: string): string {
-	return repo
-		.replace(/^https:\/\/github\.com\//, "")
-		.replace(/\.git\/?$/, "")
-		.replace(/\/$/, "");
-}
-
-function repoMatchesLockSource(repo: string, source?: string, sourceUrl?: string) {
-	const normalizedRepo = normalizeRepoSource(repo);
-	return [source, sourceUrl]
-		.filter((value): value is string => Boolean(value))
-		.some((value) => normalizeRepoSource(value) === normalizedRepo);
-}
-
-// Load installed skill names for a given repo from the lock file,
-// verifying each skill actually exists on disk and pruning stale entries.
-export async function loadInstalledSkills(
+// Selection state belongs to Skills TUI config, never to another tool's state.
+export async function loadSelectedSkills(
 	repo: string,
 	isGlobal: boolean,
 ): Promise<Set<string>> {
-	try {
-		const xdgStateHome =
-			process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state");
-		const lockPaths = isGlobal
-			? [join(xdgStateHome, "skills", ".skill-lock.json")]
-			: ["skills-lock.json"];
-		const baseDir = agentsSkillsDir(isGlobal);
-		const installed = new Set<string>();
-		for (const lockPath of lockPaths) {
-			const text = await readTextFile(lockPath);
-			if (text === null) continue;
-			const data = JSON.parse(text);
-			if (!data.skills) continue;
-			let pruned = false;
-			for (const [skillName, info] of Object.entries(data.skills) as [
-				string,
-				{ source?: string; sourceUrl?: string },
-			][]) {
-				if (!existsSync(join(baseDir, skillName))) {
-					delete data.skills[skillName];
-					pruned = true;
-					continue;
-				}
-				if (repoMatchesLockSource(repo, info.source, info.sourceUrl)) {
-					installed.add(skillName);
-				}
-			}
-			if (pruned) {
-				await writeTextFile(lockPath, JSON.stringify(data, null, 2));
-			}
-		}
-		return installed;
-	} catch {
-		return new Set();
+	const selections = new SkillSelectionStore(configPath).read(
+		isGlobal,
+		process.cwd(),
+	);
+	if (selections === null) {
+		const names = isFileRepo(repo)
+			? listLocalSkills(repo)
+			: await loadSkillsFromRepo(repo, 24 * 60 * 60 * 1000);
+		return getSkillsOnDisk(names, isGlobal);
 	}
+	return new Set(selections.filter((s) => s.repo === repo).map((s) => s.name));
 }
 
 // Check which skills from a list exist on disk in .agents/skills/.
@@ -102,86 +53,37 @@ export function getSkillsOnDisk(
 	return onDisk;
 }
 
-// Remove a skill directory from .agents/skills/ if it exists on disk.
-// Used when the skills CLI doesn't fully clean up the shared path.
-export function removeSkillFromDisk(
-	skillName: string,
+// Inspect shared Skill Instances directly. Agent Visibility is determined by
+// the caller from configured locations, not from the skills CLI's state.
+export async function listInstalledSkills(
 	isGlobal: boolean,
-): void {
-	const dest = join(agentsSkillsDir(isGlobal), skillName);
-	if (existsSync(dest)) rmSync(dest, { recursive: true });
-}
-
-// Parse `skills list` output into structured data
-export async function parseInstalledSkills(
-	isGlobal: boolean,
-	agentNames: string[],
 ): Promise<InstalledSkillInfo[]> {
-	try {
-		const text = await listSkills(isGlobal, agentNames);
-
-		// Strip ANSI codes
-		const clean = stripAnsi(text);
-		const lines = clean.split("\n");
-
-		const skills: InstalledSkillInfo[] = [];
-		let currentSkill: string | null = null;
-		let currentPath = "";
-
-		for (const line of lines) {
-			const trimmed = line.trim();
-			// Skill name line: starts with skill name followed by path (e.g. "brainstorming ~/.agents/skills/brainstorming")
-			const skillMatch = trimmed.match(/^([a-z0-9_-]+)\s+(~?\S+)/);
-			if (skillMatch) {
-				currentSkill = skillMatch[1];
-				currentPath = skillMatch[2];
-				continue;
-			}
-			// Agents line: "Agents: Claude Code, Pi" or "Agents: not linked"
-			if (currentSkill && trimmed.startsWith("Agents:")) {
-				const agentsPart = trimmed.replace("Agents:", "").trim();
-				const agentSet = new Set<string>();
-				if (agentsPart !== "not linked") {
-					for (const a of agentsPart.split(",")) {
-						agentSet.add(a.trim());
-					}
-				}
-				skills.push({
-					name: currentSkill,
-					path: currentPath,
-					agents: agentSet,
-				});
-				currentSkill = null;
-				currentPath = "";
-			}
-		}
-
-		return skills;
-	} catch {
-		return [];
-	}
+	const directory = agentsSkillsDir(isGlobal);
+	if (!existsSync(directory)) return [];
+	return readdirSync(directory)
+		.filter((name) => existsSync(join(directory, name, "SKILL.md")))
+		.map((name) => ({
+			name,
+			path: isGlobal ? `~/.agents/skills/${name}` : `.agents/skills/${name}`,
+		}));
 }
 
 // Parse the skills CLI table without depending on its border characters.
 export function parseSkillsCliOutput(text: string): string[] {
+	const section = stripAnsi(text).split(/available skills/i)[1];
+	if (!section) return [];
+	const lines = section.split("\n");
+	const bordered = lines.some((line) => /^[│|]/.test(line));
 	const skills = new Set<string>();
-	let inSkillsSection = false;
-
-	for (const line of text.split("\n")) {
-		const trimmed = line.trim();
-		if (/available skills/i.test(trimmed)) {
-			inSkillsSection = true;
-			continue;
-		}
-		if (!inSkillsSection) continue;
-		if (/^[└+]/.test(trimmed)) break;
-
-		// Support the CLI's Unicode table and a plain-text fallback. A skill name
-		// is deliberately constrained to directory-safe names used by the CLI.
-		const match = trimmed.match(/^(?:[│|]\s*)?([a-z0-9][a-z0-9_-]*)\s*$/i);
+	for (const line of lines) {
+		if (/^[└+]/.test(line.trim())) break;
+		// Clack prints names with four spaces after the bar and descriptions
+		// with six. Bare plugin headings and single-word descriptions are not names.
+		const match = bordered
+			? line.match(/^[│|] {1,4}([a-z0-9][a-z0-9_-]*)\s*$/i)
+			: line.match(/^\s*([a-z0-9][a-z0-9_-]*)\s*$/i);
 		if (match?.[1]) skills.add(match[1]);
 	}
-
 	return [...skills].sort();
 }
 
@@ -195,6 +97,7 @@ function githubRepoPath(repo: string): string | null {
 
 interface GithubTreeResponse {
 	tree?: { path?: string; type?: string }[];
+	truncated?: boolean;
 }
 
 // Discover skills directly when the external CLI cannot list a GitHub repo.
@@ -211,8 +114,9 @@ async function listGithubRepoSkills(repo: string): Promise<string[] | null> {
 		);
 		if (!response.ok) return null;
 		const data = (await response.json()) as GithubTreeResponse;
+		if (data.truncated || !Array.isArray(data.tree)) return null;
 		const skills = new Set<string>();
-		for (const entry of data.tree ?? []) {
+		for (const entry of data.tree) {
 			if (entry.type !== "blob" || !entry.path?.endsWith("/SKILL.md")) continue;
 			const skill = entry.path.slice(0, -"/SKILL.md".length).split("/").pop();
 			if (skill) skills.add(skill);
@@ -223,10 +127,32 @@ async function listGithubRepoSkills(repo: string): Promise<string[] | null> {
 	}
 }
 
-async function discoverRepoSkills(repo: string): Promise<string[] | null> {
+export async function discoverRepoSkills(
+	repo: string,
+	options: { authoritative?: boolean } = {},
+): Promise<string[] | null> {
 	try {
+		if (options.authoritative) {
+			const result = await inspectRepoSkills(repo);
+			const text = stripAnsi(result.stdout + "\n" + result.stderr);
+			if (result.code !== 0) {
+				// This exact CLI result means discovery completed, but no Skill
+				// definitions exist. Other failures are never an empty inventory.
+				return text.includes(
+					"No valid skills found. Skills require a SKILL.md with name and description.",
+				)
+					? []
+					: null;
+			}
+			const names = parseSkillsCliOutput(text);
+			const count = text.match(/Found (\d+) skills?\b/);
+			// Human output is accepted for cleanup only if its advertised count
+			// agrees with the parsed list. Browsing fallbacks are not deletion proof.
+			if (!count || names.length !== Number(count[1])) return null;
+			return names;
+		}
 		const text = await listRepoSkills(repo);
-		const skills = parseSkillsCliOutput(text);
+		const skills = parseSkillsCliOutput(stripAnsi(text));
 		if (skills.length > 0) return skills;
 
 		// An empty GitHub repository result is valid. A failed GitHub request is
@@ -275,6 +201,13 @@ async function writeRepoCache(
 	} catch {
 		/* best effort */
 	}
+}
+
+export async function cacheRepositorySkills(
+	repo: string,
+	skills: string[],
+): Promise<void> {
+	await writeRepoCache(repo, { version: 2, skills, timestamp: Date.now() });
 }
 
 // Load available skills from a repository (with per-repo caching)
@@ -350,8 +283,8 @@ export async function reconcileRepoCaches(
 			if (source === null) return null;
 
 			const [globalInstalled, projectInstalled] = await Promise.all([
-				loadInstalledSkills(repo, true),
-				loadInstalledSkills(repo, false),
+				loadSelectedSkills(repo, true),
+				loadSelectedSkills(repo, false),
 			]);
 			const installed = new Set([...globalInstalled, ...projectInstalled]);
 			for (const skill of getSkillsOnDisk(cached.skills, true))
@@ -383,10 +316,9 @@ export interface RepoNewSkillsInfo {
 	newSkills: string[];
 }
 
-// Check configured repos that already have at least one installed skill and
+// Check configured repos that already have at least one selected skill and
 // report skills that exist upstream but are not installed locally/globally.
-// The skills CLI's check/update commands only compare lock-tracked skill hashes;
-// they intentionally do not report newly added skills in the same repo.
+// New repository skills are not selected automatically.
 export async function findNewSkillsInTrackedRepos(
 	repos: RepoSource[],
 	isGlobal: boolean,
@@ -395,9 +327,7 @@ export async function findNewSkillsInTrackedRepos(
 	const results: RepoNewSkillsInfo[] = [];
 
 	for (const repo of repos) {
-		const installed = isFileRepo(repo)
-			? getInstalledLocalSkills(repo, isGlobal)
-			: await loadInstalledSkills(repo, isGlobal);
+		const installed = await loadSelectedSkills(repo, isGlobal);
 
 		// Avoid reporting every skill from every configured repo. Only repos with at
 		// least one installed skill are relevant to Check/Update.
@@ -406,12 +336,6 @@ export async function findNewSkillsInTrackedRepos(
 		const skills = isFileRepo(repo)
 			? listLocalSkills(repo)
 			: await loadSkillsFromRepo(repo, cacheExpiryMs, { forceRefresh: true });
-
-		// Treat matching skill directories on disk as installed even if they are not
-		// represented in the skills CLI lock file (for example symlinked/shared skills).
-		for (const skill of getSkillsOnDisk(skills, isGlobal)) {
-			installed.add(skill);
-		}
 
 		const newSkills = skills.filter((skill) => !installed.has(skill));
 		if (newSkills.length > 0) {
@@ -427,12 +351,16 @@ export async function formatNewSkillsSummary(
 	isGlobal: boolean,
 	cacheExpiryMs: number,
 ): Promise<string> {
-	const infos = await findNewSkillsInTrackedRepos(repos, isGlobal, cacheExpiryMs);
+	const infos = await findNewSkillsInTrackedRepos(
+		repos,
+		isGlobal,
+		cacheExpiryMs,
+	);
 	if (infos.length === 0) {
-		return "\n✓ No new skills found in installed repositories.\n";
+		return "\n✓ No new skills found in selected repositories.\n";
 	}
 
-	const lines = ["", "New skills available in installed repositories:"];
+	const lines = ["", "New skills available in selected repositories:"];
 	for (const info of infos) {
 		lines.push(`\n${repoDisplayName(info.repo)} (${info.newSkills.length})`);
 		for (const skill of info.newSkills) {
@@ -483,12 +411,6 @@ export function pruneCache(repos: RepoSource[], cacheExpiryMs: number): void {
 
 // --- file:// repo support ---
 
-// Resolve ~ in a path
-function expandHome(p: string): string {
-	if (p.startsWith("~/")) return join(homedir(), p.slice(2));
-	return p;
-}
-
 // Get the .agents/skills base dir (local or global)
 function agentsSkillsDir(isGlobal: boolean): string {
 	return isGlobal
@@ -506,121 +428,5 @@ export function listLocalSkills(repoUrl: string): string[] {
 			.sort();
 	} catch {
 		return [];
-	}
-}
-
-// Check which skills from a file:// repo are currently installed
-export function getInstalledLocalSkills(
-	repoUrl: string,
-	isGlobal: boolean,
-): Set<string> {
-	const baseDir = agentsSkillsDir(isGlobal);
-	const available = listLocalSkills(repoUrl);
-	const installed = new Set<string>();
-	for (const skill of available) {
-		const dest = join(baseDir, skill);
-		if (existsSync(dest)) installed.add(skill);
-	}
-	return installed;
-}
-
-// Ensure absolute symlinks from each non-universal agent's skill path to .agents/skills/<skill>.
-// The skills CLI may create relative symlinks which break across directory structures.
-export function ensureAgentSymlinks(
-	skillName: string,
-	isGlobal: boolean,
-	agents: AgentConfig[],
-	selectedAgents: Set<string>,
-): void {
-	const baseDir = agentsSkillsDir(isGlobal);
-	const destDir = join(baseDir, skillName);
-	if (!existsSync(destDir)) return;
-
-	for (const agent of agents) {
-		if (!selectedAgents.has(agent.name)) continue;
-		if (agent.mode === "copy") {
-			const result = syncCopiedSkills(agent, isGlobal ? "global" : "local", true);
-			if (result.errors.length) throw new Error(result.errors.map(({ path, error }) => `${path}: ${String(error)}`).join("; "));
-			continue;
-		}
-		const agentPath = isGlobal ? agent.global : agent.local;
-		// Skip agents that already use the standard .agents/skills/ path
-		if (agentPath === ".agents/skills/" || agentPath === "~/.agents/skills/")
-			continue;
-		const agentSkillsDir = expandHome(
-			isGlobal ? agentPath : join(process.cwd(), agentPath),
-		);
-		const agentSkillDir = join(agentSkillsDir, skillName);
-		mkdirSync(agentSkillsDir, { recursive: true });
-		// Use lstatSync to detect broken symlinks (existsSync follows symlinks
-		// and returns false for broken ones, leaving them in place).
-		try {
-			lstatSync(agentSkillDir);
-			rmSync(agentSkillDir, { recursive: true });
-		} catch {
-			/* doesn't exist */
-		}
-		symlinkSync(resolve(destDir), agentSkillDir);
-	}
-}
-
-// Install a skill from a file:// repo: copy into .agents/skills/ and symlink to agent paths
-export function installLocalSkill(
-	repoUrl: string,
-	skillName: string,
-	isGlobal: boolean,
-	agents: AgentConfig[],
-	selectedAgents: Set<string>,
-): void {
-	const srcDir = join(fileUrlToPath(repoUrl), skillName);
-	const baseDir = agentsSkillsDir(isGlobal);
-	const destDir = join(baseDir, skillName);
-
-	// Copy skill into .agents/skills/<skill>
-	mkdirSync(baseDir, { recursive: true });
-	if (existsSync(destDir)) rmSync(destDir, { recursive: true });
-	cpSync(srcDir, destDir, { recursive: true });
-
-	ensureAgentSymlinks(skillName, isGlobal, agents, selectedAgents);
-}
-
-// Remove a skill installed from a file:// repo
-export function removeLocalSkill(
-	skillName: string,
-	isGlobal: boolean,
-	agents: AgentConfig[],
-	selectedAgents: Set<string>,
-): void {
-	const baseDir = agentsSkillsDir(isGlobal);
-	const destDir = join(baseDir, skillName);
-
-	// Remove from .agents/skills/
-	if (existsSync(destDir)) rmSync(destDir, { recursive: true });
-
-	// Remove symlinks from agent paths
-	for (const agent of agents) {
-		if (!selectedAgents.has(agent.name)) continue;
-		if (agent.mode === "copy") {
-			const result = syncCopiedSkills(agent, isGlobal ? "global" : "local", true);
-			if (result.errors.length) throw new Error(result.errors.map(({ path, error }) => `${path}: ${String(error)}`).join("; "));
-			continue;
-		}
-		const agentPath = isGlobal ? agent.global : agent.local;
-		if (agentPath === ".agents/skills/" || agentPath === "~/.agents/skills/")
-			continue;
-		const agentSkillDir = join(
-			expandHome(isGlobal ? agentPath : join(process.cwd(), agentPath)),
-			skillName,
-		);
-		try {
-			if (
-				lstatSync(agentSkillDir).isSymbolicLink() ||
-				existsSync(agentSkillDir)
-			) {
-				rmSync(agentSkillDir, { recursive: true });
-			}
-		} catch {
-			/* already gone */
-		}
 	}
 }

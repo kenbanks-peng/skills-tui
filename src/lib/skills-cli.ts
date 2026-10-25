@@ -1,19 +1,16 @@
-// Centralized CLI interface for the skills CLI.
-// Every invocation of `bunx skills` / `npx skills` goes through here.
-
+// All skills CLI invocations go through this module. Skills TUI supplies explicit
+// repositories and skill names; selection state belongs to Skills TUI config.
 import { collectStream, spawn } from "#lib/compat";
 import { ensureOpencode, getRunner, logCmd } from "#lib/utils";
 
 function base(...rest: string[]): string[] {
 	return [getRunner(), "skills", ...rest];
 }
-
 export interface RunResult {
 	code: number;
 	stdout: string;
 	stderr: string;
 }
-
 async function run(args: string[]): Promise<RunResult> {
 	logCmd("run", args);
 	const proc = spawn(args, {
@@ -29,63 +26,40 @@ async function run(args: string[]): Promise<RunResult> {
 	logCmd("done", args, code, stdout, stderr);
 	return { code, stdout, stderr };
 }
-
-// --- Executed commands (run and return results) ---
-
-export async function listSkills(
-	isGlobal: boolean,
-	agents: Iterable<string>,
-): Promise<string> {
-	const args = base("list");
-	if (isGlobal) args.push("-g");
-	args.push("--agent", ...ensureOpencode(agents));
-	const { stdout } = await run(args);
-	return stdout;
+export function inspectRepoSkills(repo: string): Promise<RunResult> {
+	return run(base("add", repo, "--list", "--full-depth"));
 }
-
 export async function listRepoSkills(repo: string): Promise<string> {
-	const { stdout } = await run(base("add", repo, "--list"));
-	return stdout;
+	const result = await inspectRepoSkills(repo);
+	if (result.code !== 0) throw new Error(result.stderr || result.stdout);
+	return result.stdout;
 }
-
-export async function addSkill(
+export function addArgs(
 	isGlobal: boolean,
 	agents: Iterable<string>,
 	repo: string,
-	skill?: string,
-): Promise<RunResult> {
-	const args = base("add");
-	if (isGlobal) args.push("-g");
-	if (skill) args.push("--skill", skill);
-	args.push("--agent", ...ensureOpencode(agents));
-	args.push("-y", repo);
-	return run(args);
+	skill: string,
+): string[] {
+	return base(
+		"add",
+		...(isGlobal ? ["-g"] : []),
+		"--full-depth",
+		"--skill",
+		skill,
+		"--agent",
+		...ensureOpencode(agents),
+		"-y",
+		repo,
+	);
 }
-
-export async function removeSkill(
+export function addSkill(
 	isGlobal: boolean,
 	agents: Iterable<string>,
 	repo: string,
-	skill?: string,
+	skill: string,
 ): Promise<RunResult> {
-	const args = base("remove");
-	if (isGlobal) args.push("-g");
-	if (skill) args.push("--skill", skill);
-	args.push("--agent", ...ensureOpencode(agents));
-	args.push("-y", repo);
-	return run(args);
+	return run(addArgs(isGlobal, agents, repo, skill));
 }
-
-export async function updateSkills(isGlobal: boolean): Promise<RunResult> {
-	return run(updateArgs(isGlobal));
-}
-
-// --- Args for CommandOutput (streaming needed) ---
-
-export function updateArgs(isGlobal: boolean): string[] {
-	return base("update", isGlobal ? "-g" : "-p", "-y");
-}
-
 export function findArgs(isGlobal: boolean, query: string): string[] {
 	return base("find", ...(isGlobal ? ["-g"] : []), query);
 }

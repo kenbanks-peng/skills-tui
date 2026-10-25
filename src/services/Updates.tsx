@@ -1,10 +1,8 @@
 import { useKeyboard } from "@opentui/react";
-import { useState } from "react";
-import { CommandOutput } from "#components/CommandOutput";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepoSource } from "#lib/config";
-import { refreshConfiguredCopies } from "#lib/copy-agent-skills";
+import { synchronizeConfiguredSkills } from "#lib/configured-skills";
 import { formatNewSkillsSummary } from "#lib/skills";
-import { updateArgs } from "#lib/skills-cli";
 import { theme } from "#lib/theme";
 
 interface UpdatesProps {
@@ -13,6 +11,7 @@ interface UpdatesProps {
 	isGlobal: boolean;
 	cacheExpiryMs: number;
 	onBack: () => void;
+	onUpdateComplete: () => void;
 }
 
 export function Updates({
@@ -21,42 +20,57 @@ export function Updates({
 	isGlobal,
 	cacheExpiryMs,
 	onBack,
+	onUpdateComplete,
 }: UpdatesProps) {
-	const [args, setArgs] = useState(() => updateArgs(isGlobal));
-	const [afterCommand] = useState(
-		() => async () => {
-			const errors = await refreshConfiguredCopies();
-			return errors + await formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs);
-		},
-	);
-
+	const [output, setOutput] = useState("");
+	const [running, setRunning] = useState(false);
+	const busy = useRef(false);
+	const complete = useRef(onUpdateComplete);
+	complete.current = onUpdateComplete;
+	const update = useCallback(async () => {
+		if (busy.current) return;
+		busy.current = true;
+		setRunning(true);
+		setOutput("Updating selected skills from configured repositories...");
+		try {
+			const result = await synchronizeConfiguredSkills({
+				refresh: true,
+				scopes: [isGlobal],
+			});
+			const errors = result.errors.map(
+				({ path, error }) => `${path}: ${String(error)}`,
+			);
+			setOutput(
+				(errors.length
+					? errors.join("\n")
+					: "Selected skills are synchronized.") +
+					(await formatNewSkillsSummary(repos, isGlobal, cacheExpiryMs)),
+			);
+			complete.current();
+		} catch (error) {
+			setOutput(String(error));
+		} finally {
+			busy.current = false;
+			setRunning(false);
+		}
+	}, [repos, isGlobal, cacheExpiryMs]);
+	useEffect(() => {
+		void update();
+	}, [update]);
 	useKeyboard((key) => {
 		if (!focused) return;
-		if (key.name === "r") {
-			setArgs([...updateArgs(isGlobal)]);
-		}
+		if (key.name === "r") void update();
+		if (key.name === "escape" && !running) onBack();
 	});
-
 	return (
 		<box flexDirection="column" flexGrow={1} gap={1}>
-			<box
-				border
-				borderStyle="rounded"
-				borderColor={focused ? theme.green : theme.surface2}
-				paddingLeft={1}
-				paddingRight={1}
-			>
-				<text fg={theme.text}>Applying latest versions</text>
-				<text fg={theme.overlay1}>
-					{"  "}r: update again  esc: back
-				</text>
-			</box>
-			<CommandOutput
-				args={args}
-				focused={focused}
-				onBack={onBack}
-				afterCommand={afterCommand}
-			/>
+			<text fg={theme.text}>
+				{running ? "Applying latest versions" : "Update complete"}
+			</text>
+			<text fg={theme.overlay1}>r: update again esc: back</text>
+			<scrollbox flexGrow={1}>
+				<text fg={theme.text}>{output}</text>
+			</scrollbox>
 		</box>
 	);
 }

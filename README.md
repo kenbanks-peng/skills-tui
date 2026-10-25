@@ -11,7 +11,7 @@ Browse skill repositories, install/remove skills, check for updates, and control
 - **Browse by repo** — explore skills from configured repositories (GitHub, remote URL, or local `file://` path)
 - **Browse by skill** — see all installed skills and which agents they're linked to
 - **Find** — search for skills across repos
-- **Automatic updates** — install the latest upstream skill revisions at startup
+- **Automatic synchronization** — keep selected skills installed, remove obsolete skills, and refresh selected skills at startup
 - **Multi-agent support** — install skills to any combination of agents at once
 - **Global & local** — toggle between global (`~/.agents/skills/`) and project-local (`.agents/skills/`) installs
 - **Filter** — type-ahead filtering when browsing skills
@@ -48,6 +48,12 @@ display = "My Agent"
 local = ".my-agent/skills/"
 global = "~/.my-agent/skills/"
 ```
+
+Skill selections are saved in this config. Existing installed selections are
+adopted on the first successful synchronization. Missing selected folders are
+restored; deselected and confirmed obsolete skills are removed. Synchronization
+runs at startup, after selections change, and every 30 seconds while open.
+See [selection and synchronization](docs/skill-link-reconciliation.md).
 
 ### Standalone copies for mounted configurations
 

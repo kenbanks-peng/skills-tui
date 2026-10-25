@@ -1,22 +1,36 @@
 import { describe, expect, test } from "bun:test";
-import { updateArgs } from "./skills-cli";
+import { addArgs } from "./skills-cli";
 
-describe("skills CLI update arguments", () => {
-	test("selects User Scope explicitly", () => {
-		expect(updateArgs(true).slice(1)).toEqual([
-		"skills",
-		"update",
-		"-g",
-		"-y",
-	]);
+describe("explicit skill installation", () => {
+	test("supplies repository and skill for User Scope without an update command", () => {
+		expect(
+			addArgs(true, ["opencode"], "owner/repo", "chosen").slice(1),
+		).toEqual([
+			"skills",
+			"add",
+			"-g",
+			"--full-depth",
+			"--skill",
+			"chosen",
+			"--agent",
+			"opencode",
+			"-y",
+			"owner/repo",
+		]);
 	});
-
-	test("selects Project Scope explicitly", () => {
-		expect(updateArgs(false).slice(1)).toEqual([
-		"skills",
-		"update",
-		"-p",
-		"-y",
-	]);
+	test("uses Project Scope when the user flag is absent", () => {
+		expect(
+			addArgs(false, ["opencode"], "owner/repo", "chosen").slice(1),
+		).toEqual([
+			"skills",
+			"add",
+			"--full-depth",
+			"--skill",
+			"chosen",
+			"--agent",
+			"opencode",
+			"-y",
+			"owner/repo",
+		]);
 	});
 });

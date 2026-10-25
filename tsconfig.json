@@ -6,9 +6,9 @@
 		"jsx": "react-jsx",
 		"jsxImportSource": "@opentui/react",
 		"strict": true,
+		"types": ["bun"],
 		"skipLibCheck": true,
 		"noEmit": true,
-		"baseUrl": ".",
 		"paths": {
 			"#components/*": ["./src/components/*"],
 			"#hooks/*": ["./src/hooks/*"],

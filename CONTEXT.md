@@ -40,6 +40,10 @@ _Avoid_: Available skill, installed skill when session availability is meant
 The visibility boundary of an Installed Skill: User Scope for user-wide installs, or Project Scope for repository-local installs.
 _Avoid_: Local/global when domain meaning is needed
 
+**Skill Selection**:
+A User's saved choice to install a named Skill from a configured repository in an Install Scope. Skills TUI config records this choice even when its deployed Skill Instance is missing. A Project Scope selection is specific to one project.
+_Avoid_: Installed Skill when referring to saved intent
+
 **Installed Skill**:
 A skill that has been copied, linked, or otherwise placed into an agent-readable filesystem location for a User Scope or Project Scope.
 _Avoid_: Discoverable skill, active skill

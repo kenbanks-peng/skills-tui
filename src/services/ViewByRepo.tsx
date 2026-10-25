@@ -1,24 +1,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SkillPreview } from "#components/SkillPreview";
 import { SkillsList } from "#components/SkillsList";
 import { useScrollableList } from "#hooks/useScrollableList";
-import type { AgentConfig, RepoSource } from "#lib/config";
+import type { RepoSource } from "#lib/config";
 import { assessRepositoryPanelWidths } from "#lib/repository-panel-layout";
 import {
-	ensureAgentSymlinks,
-	getInstalledLocalSkills,
-	getSkillsOnDisk,
-	installLocalSkill,
+	loadSelectedSkills,
 	listLocalSkills,
-	loadInstalledSkills,
 	loadSkillsFromRepo,
-	removeLocalSkill,
-	removeSkillFromDisk,
 } from "#lib/skills";
-import { addSkill, removeSkill } from "#lib/skills-cli";
+import { setConfiguredSkillSelection } from "#lib/configured-skills";
 import { theme } from "#lib/theme";
 import {
 	fileUrlToPath,
@@ -49,7 +43,9 @@ function fetchRepoSkills(
 
 function githubRepoPath(repo: RepoSource): string | null {
 	if (/^[^/\s]+\/[^/\s]+$/.test(repo)) return repo;
-	const match = repo.match(/^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?\/?$/);
+	const match = repo.match(
+		/^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?\/?$/,
+	);
 	return match?.[1] ?? null;
 }
 
@@ -85,8 +81,6 @@ interface ViewByRepoProps {
 	focusedColumn: "repos" | "skills" | null;
 	repos: RepoSource[];
 	isGlobal: boolean;
-	agents: AgentConfig[];
-	selectedAgents: Set<string>;
 	cacheExpiryMs: number;
 	cacheRefreshKey: number;
 	onFocusSkills: () => void;
@@ -99,8 +93,6 @@ export function ViewByRepo({
 	focusedColumn,
 	repos,
 	isGlobal,
-	agents,
-	selectedAgents,
 	cacheExpiryMs,
 	cacheRefreshKey,
 	onFocusSkills,
@@ -113,6 +105,7 @@ export function ViewByRepo({
 	const [availableSkills, setAvailableSkills] = useState<string[]>([]);
 	const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
 	const [loadingSkills, setLoadingSkills] = useState(false);
+	const [actionRunning, setActionRunning] = useState(false);
 	const [previewContent, setPreviewContent] = useState<string | null>(null);
 	const [previewPath, setPreviewPath] = useState<string | null>(null);
 	const [loadingPreview, setLoadingPreview] = useState(false);
@@ -188,100 +181,76 @@ export function ViewByRepo({
 		}
 	}, [filteredRepos.length, filteredRepos[0], selectedRepo]);
 
-	// Load skills when repo changes
+	const currentView = useRef({ repo: selectedRepo, isGlobal });
+	currentView.current = { repo: selectedRepo, isGlobal };
+
+	// Reload from TUI selections after both user actions and background repair.
 	useEffect(() => {
 		if (!selectedRepo) return;
-		skillsList.reset();
-
-		if (isFileRepo(selectedRepo)) {
-			const skills = listLocalSkills(selectedRepo);
-			const installed = getInstalledLocalSkills(selectedRepo, isGlobal);
-			setAllRepoSkills((prev) => new Map(prev).set(selectedRepo, skills));
-			setAvailableSkills(skills);
-			setSelectedSkills(installed);
-			setLoadingSkills(false);
-			return;
-		}
-
-		// loadSkillsFromRepo reads from disk cache (~/.cache/skills-tui/)
-		// and resolves fast on cache hit. Only show "Loading..." if the
-		// fetch takes long enough to indicate a real network call.
-		setAvailableSkills([]);
-		setSelectedSkills(new Set());
-		const timer = setTimeout(() => setLoadingSkills(true), 50);
-
+		let cancelled = false;
+		const timer = setTimeout(() => {
+			if (!cancelled) setLoadingSkills(true);
+		}, 50);
 		Promise.all([
 			fetchRepoSkills(selectedRepo, cacheExpiryMs),
-			loadInstalledSkills(selectedRepo, isGlobal),
-		]).then(([skills, installed]) => {
+			loadSelectedSkills(selectedRepo, isGlobal),
+		])
+			.then(([skills, installed]) => {
+				if (cancelled) return;
+				setAllRepoSkills((previous) =>
+					new Map(previous).set(selectedRepo, skills),
+				);
+				setAvailableSkills(skills);
+				setSelectedSkills(installed);
+			})
+			.catch((error) => {
+				if (!cancelled) onError(String(error));
+			})
+			.finally(() => {
+				clearTimeout(timer);
+				if (!cancelled) setLoadingSkills(false);
+			});
+		return () => {
+			cancelled = true;
 			clearTimeout(timer);
-			const onDisk = getSkillsOnDisk(skills, isGlobal);
-			for (const s of onDisk) installed.add(s);
-			setAllRepoSkills((prev) => new Map(prev).set(selectedRepo, skills));
-			setAvailableSkills(skills);
-			setSelectedSkills(installed);
-			setLoadingSkills(false);
-		});
-	}, [selectedRepo, isGlobal, cacheExpiryMs, skillsList.reset]);
-
-	// Re-read the selected repository after background cache reconciliation.
-	// Keep the current list and cursor visible while the refreshed data arrives.
-	useEffect(() => {
-		if (!selectedRepo || isFileRepo(selectedRepo) || cacheRefreshKey === 0)
-			return;
-
-		Promise.all([
-			fetchRepoSkills(selectedRepo, cacheExpiryMs),
-			loadInstalledSkills(selectedRepo, isGlobal),
-		]).then(([skills, installed]) => {
-			for (const skill of getSkillsOnDisk(skills, isGlobal))
-				installed.add(skill);
-			setAllRepoSkills((prev) => new Map(prev).set(selectedRepo, skills));
-			setAvailableSkills(skills);
-			setSelectedSkills(installed);
-		});
+		};
 	}, [selectedRepo, isGlobal, cacheExpiryMs, cacheRefreshKey]);
 
-	const runAction = (
-		action: "add" | "remove",
-		repoUrl: string,
-		skill?: string,
-	) => {
-		const label = skill || repoUrl;
-		const fn = action === "add" ? addSkill : removeSkill;
-		fn(isGlobal, selectedAgents, repoUrl, skill)
-			.then(({ code }) => {
-				if (code !== 0) {
-					onError(
-						`ERROR while ${action === "add" ? "installing" : "removing"} ${label}`,
-					);
-				} else {
-					if (action === "remove" && skill) {
-						// The CLI may not remove from the shared .agents/skills/ path
-						// if the skill was installed by a different agent.
-						removeSkillFromDisk(skill, isGlobal);
-					} else if (action === "add" && skill) {
-						// The CLI may create relative symlinks for agent paths;
-						// replace them with absolute symlinks.
-						ensureAgentSymlinks(skill, isGlobal, agents, selectedAgents);
-					}
-					onInstallComplete();
-				}
-			})
-			.catch(() => {
+	const runAction = async (repo: string, skill: string, selected: boolean) => {
+		if (actionRunning) return;
+		setActionRunning(true);
+		try {
+			const result = await setConfiguredSkillSelection(
+				repo,
+				skill,
+				isGlobal,
+				selected,
+			);
+			const installed = await loadSelectedSkills(repo, isGlobal);
+			if (
+				currentView.current.repo === repo &&
+				currentView.current.isGlobal === isGlobal
+			)
+				setSelectedSkills(installed);
+			if (result.errors.length)
 				onError(
-					`ERROR while ${action === "add" ? "installing" : "removing"} ${label}`,
+					result.errors
+						.map(({ path, error }) => `${path}: ${String(error)}`)
+						.join("; "),
 				);
-			});
+			onInstallComplete();
+		} catch (error) {
+			onError(String(error));
+		} finally {
+			setActionRunning(false);
+		}
 	};
 
 	useKeyboard((key) => {
-		// Repos: enter to navigate to skills or install whole repo
+		// Repos: enter navigates to the skill selections
 		if (key.name === "enter" && focusedColumn === "repos" && selectedRepo) {
 			if (filteredSkills.length > 0) {
 				onFocusSkills();
-			} else if (!isFileRepo(selectedRepo)) {
-				runAction("add", selectedRepo);
 			}
 			return;
 		}
@@ -295,43 +264,10 @@ export function ViewByRepo({
 			return;
 		}
 
-		if (key.name === "space") {
+		if (key.name === "space" && !actionRunning) {
 			const skill = filteredSkills[skillsList.index];
-			if (skill && selectedRepo) {
-				const isSelected = selectedSkills.has(skill);
-				if (isFileRepo(selectedRepo)) {
-					try {
-						if (isSelected) {
-							removeLocalSkill(skill, isGlobal, agents, selectedAgents);
-						} else {
-							installLocalSkill(
-								selectedRepo,
-								skill,
-								isGlobal,
-								agents,
-								selectedAgents,
-							);
-						}
-						onInstallComplete();
-					} catch (_err) {
-						onError(
-							`ERROR while ${isSelected ? "removing" : "installing"} ${skill}`,
-						);
-					}
-				} else {
-					if (isSelected) {
-						runAction("remove", selectedRepo, skill);
-					} else {
-						runAction("add", selectedRepo, skill);
-					}
-				}
-				setSelectedSkills((prev) => {
-					const newSet = new Set(prev);
-					if (newSet.has(skill)) newSet.delete(skill);
-					else newSet.add(skill);
-					return newSet;
-				});
-			}
+			if (skill && selectedRepo)
+				void runAction(selectedRepo, skill, !selectedSkills.has(skill));
 		}
 	});
 
@@ -403,8 +339,6 @@ export function ViewByRepo({
 							setSelectedRepo(repo);
 							if (availableSkills.length > 0) {
 								onFocusSkills();
-							} else if (!isFileRepo(repo)) {
-								runAction("add", repo);
 							}
 						}}
 					/>
@@ -418,27 +352,27 @@ export function ViewByRepo({
 			{/* Always show the selected repository's skills pane. Rendering it only
 			    after a successful fetch made the entire right side disappear. */}
 			<box flexDirection="row" flexGrow={1} minWidth={0}>
-					<SkillsList
-						width={skillsPanelWidth}
-						focusedColumn={focusedColumn}
-						filteredSkills={filteredSkills}
-						selectedSkills={selectedSkills}
-						loadingSkills={loadingSkills}
-						searchFilter={searchFilter}
-						scrollOffset={skillsList.scrollOffset}
-						activeIndex={skillsList.index}
-						adjustedVH={adjustedVH}
+				<SkillsList
+					width={skillsPanelWidth}
+					focusedColumn={focusedColumn}
+					filteredSkills={filteredSkills}
+					selectedSkills={selectedSkills}
+					loadingSkills={loadingSkills}
+					searchFilter={searchFilter}
+					scrollOffset={skillsList.scrollOffset}
+					activeIndex={skillsList.index}
+					adjustedVH={adjustedVH}
+				/>
+				{showPreview && (
+					<SkillPreview
+						width={previewPanelWidth}
+						skillName={activeSkill}
+						path={previewPath}
+						content={previewContent}
+						loading={loadingPreview}
 					/>
-					{showPreview && (
-						<SkillPreview
-							width={previewPanelWidth}
-							skillName={activeSkill}
-							path={previewPath}
-							content={previewContent}
-							loading={loadingPreview}
-						/>
-					)}
-				</box>
+				)}
+			</box>
 		</>
 	);
 }
