@@ -9,7 +9,7 @@ use anyhow::{Result, ensure};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Wrap},
@@ -343,26 +343,17 @@ impl App {
             );
             return;
         }
-        let notification = self.busy
-            || !self.snapshot.errors.is_empty()
-            || (!self.status.is_empty() && !self.status.starts_with("Synchronized."));
-        let outer = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Min(1),
-            Constraint::Length(u16::from(notification)),
-            Constraint::Length(5),
-        ])
-        .split(area);
-        let body = outer[1];
+        let outer = Layout::vertical([Constraint::Min(1), Constraint::Length(6)]).split(area);
         let columns = Layout::horizontal([Constraint::Length(28), Constraint::Min(1)])
             .spacing(1)
-            .split(Rect {
-                height: body.height.saturating_sub(2),
-                ..body
-            });
-        let side = Layout::vertical([Constraint::Length(8), Constraint::Min(1)])
-            .spacing(1)
-            .split(columns[0]);
+            .split(outer[0]);
+        let side = Layout::vertical([
+            Constraint::Length(8),
+            Constraint::Length(3),
+            Constraint::Min(1),
+        ])
+        .spacing(0)
+        .split(columns[0]);
         render_list(
             frame,
             side[0],
@@ -371,31 +362,7 @@ impl App {
             self.service,
             self.focus == Focus::Services,
         );
-        let description = [
-            "Browse and install",
-            "Manage installed skills",
-            "Find skills",
-            "Check for updates",
-        ][self.service];
-        frame.render_widget(
-            Paragraph::new(description)
-                .style(Style::default().fg(Color::Rgb(166, 173, 200)).italic()),
-            Rect::new(
-                side[0].x + 2,
-                side[0].bottom() - 1,
-                side[0].width.saturating_sub(3),
-                1,
-            ),
-        );
-        self.draw_settings(frame, side[1]);
-        let content = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(1),
-                Constraint::Length(if self.service == 3 { 0 } else { 3 }),
-            ])
-            .spacing(1)
-            .split(columns[1]);
+        self.draw_settings(frame, side[2]);
         if self.service == 3 {
             let mut lines = vec![
                 format!("{} Skill Instances changed.", self.snapshot.changed),
@@ -428,27 +395,40 @@ impl App {
                         "Updates — Enter or r: apply latest versions",
                         self.focus == Focus::Skills,
                     )),
-                content[0],
+                columns[1],
             );
         } else {
-            self.draw_skills(frame, content[0]);
-            let search = if self.filter.is_empty() {
-                "› Type to filter skills...".into()
-            } else {
-                format!("› {}", self.filter)
-            };
-            frame.render_widget(
-                Paragraph::new(search)
-                    .style(Style::default().fg(if self.filter.is_empty() { MUTED } else { TEXT }))
-                    .block(
-                        panel("Filter", self.focus == Focus::Search)
-                            .padding(Padding::horizontal(1)),
-                    ),
-                content[1],
-            );
+            self.draw_skills(frame, columns[1]);
         }
+        draw_footer(frame, outer[1]);
+        let footer = outer[1];
+        let filter_disabled = self.service == 3;
+        let search = if filter_disabled {
+            String::new()
+        } else if self.filter.is_empty() {
+            "› Type to filter...".into()
+        } else {
+            format!("› {}", self.filter)
+        };
+        frame.render_widget(
+            Paragraph::new(search)
+                .style(
+                    Style::default().fg(if filter_disabled || self.filter.is_empty() {
+                        MUTED
+                    } else {
+                        TEXT
+                    }),
+                )
+                .block(
+                    panel("Filter", !filter_disabled && self.focus == Focus::Search)
+                        .padding(Padding::horizontal(1)),
+                ),
+            side[1],
+        );
         let message = if self.busy {
             "Synchronizing skills in background..."
+        } else if self.status.starts_with("Synchronized.") {
+            ""
         } else {
             &self.status
         };
@@ -460,9 +440,13 @@ impl App {
                     Color::LightRed
                 }))
                 .wrap(Wrap { trim: false }),
-            outer[2],
+            Rect::new(
+                footer.x + 2,
+                footer.y + 4,
+                footer.width.saturating_sub(4),
+                1,
+            ),
         );
-        draw_footer(frame, outer[3]);
     }
     fn draw_settings(&self, frame: &mut Frame, area: Rect) {
         let block = panel("Settings", self.focus == Focus::Settings);
@@ -543,7 +527,14 @@ impl App {
         let widths = repository_widths(
             area.width,
             &self.snapshot.config.repos,
-            &rows.iter().map(|r| r.name.clone()).collect::<Vec<_>>(),
+            &self
+                .snapshot
+                .inventory
+                .repos
+                .values()
+                .flatten()
+                .map(|skill| skill.name.clone())
+                .collect::<Vec<_>>(),
         );
         let show_preview = self.service != 0 || widths[2] > 0;
         let parts = if self.service == 0 {
@@ -787,7 +778,8 @@ fn draw_footer(frame: &mut Frame, area: Rect) {
     let block = Block::bordered().border_style(Style::default().fg(Color::Rgb(69, 71, 90)));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let logo = ["█▀▀ █ █ ▀█▀ █   █   █▀▀", "▄██ █▀▄ ▄█▄ █▄▄ █▄▄ ▄██"];
+    // Match OpenTUI's tiny font glyphs and one-column letter spacing.
+    let logo = ["█▀▀ █▄▀ █ █   █   █▀▀", "▄▄█ █ █ █ █▄▄ █▄▄ ▄▄█"];
     for (i, line) in logo.iter().enumerate() {
         frame.render_widget(
             Paragraph::new(*line).style(Style::default().fg(ACCENT)),
@@ -960,13 +952,12 @@ mod tests {
             "Preview",
             "Navigate:",
             "global",
-            "Browse and install",
         ] {
             assert!(text.contains(label), "missing {label}");
         }
         assert!(!text.contains("Synchronized."));
-        assert_eq!(buffer[(0, 1)].symbol(), "╔");
-        assert_eq!(buffer[(29, 1)].symbol(), "╭");
+        assert_eq!(buffer[(0, 0)].symbol(), "╔");
+        assert_eq!(buffer[(29, 0)].symbol(), "╭");
     }
 
     #[test]
@@ -1000,6 +991,107 @@ mod tests {
         let widths = repository_widths(50, &repos, &skills);
         assert_eq!(widths[2], 0);
         assert_eq!(widths[0] + widths[1] + 1, 50);
+    }
+
+    #[test]
+    fn filter_stays_between_services_and_settings_without_resizing_content() {
+        let (_temp, mut app) = app();
+        for busy in [false, true] {
+            app.busy = busy;
+            app.status = "Synchronized. 0 Skill Instances changed.".into();
+            let mut terminal = Terminal::new(TestBackend::new(206, 46)).unwrap();
+            terminal.draw(|f| app.draw(f)).unwrap();
+            let buffer = terminal.backend().buffer();
+            let footer_y = 40;
+            // The sidebar and all content panels end immediately above the footer.
+            for x in 0..206 {
+                if buffer[(x, 0)].symbol() == "╭" || x == 0 {
+                    assert_eq!(buffer[(x, footer_y - 1)].symbol(), "╰", "column at {x}");
+                }
+            }
+            assert_eq!(buffer[(0, footer_y)].symbol(), "┌");
+            assert_eq!(buffer[(29, footer_y - 1)].symbol(), "╰");
+            let row = |y| {
+                (0..206)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            };
+            assert!(row(8).contains("Filter"));
+            assert!(row(11).contains("Settings"));
+            assert!(row(9).contains("Type to filter..."));
+            assert!(!row(footer_y + 4).contains("Filter"));
+            assert_eq!(row(footer_y + 4).contains("Synchronizing"), busy);
+        }
+    }
+
+    #[test]
+    fn updates_keeps_filter_visible_but_disabled() {
+        let (_temp, mut app) = app();
+        app.service = 3;
+        app.busy = false;
+        let mut terminal = Terminal::new(TestBackend::new(206, 46)).unwrap();
+        terminal.draw(|f| app.draw(f)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let row = |y| (0..28).map(|x| buffer[(x, y)].symbol()).collect::<String>();
+        assert!(row(8).contains("Filter"));
+        assert!(row(9).chars().skip(1).take(26).all(|c| c == ' '));
+        assert!(row(11).contains("Settings"));
+        assert_eq!(buffer[(2, 9)].fg, MUTED);
+        assert!(!app.focus_order().contains(&Focus::Search));
+        let (tx, _rx) = mpsc::channel();
+        app.key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE), &tx);
+        assert_ne!(app.focus, Focus::Search);
+    }
+
+    #[test]
+    fn repository_width_is_stable_across_selection_and_filtering() {
+        let (_temp, mut app) = app();
+        app.snapshot.config.repos = vec!["one/repo".into(), "two/repo".into()];
+        for (repo, name) in [
+            ("one/repo", "short"),
+            (
+                "two/repo",
+                "a-much-longer-skill-name-that-changes-the-layout",
+            ),
+        ] {
+            app.snapshot.inventory.repos.insert(
+                repo.into(),
+                vec![Skill {
+                    name: name.into(),
+                    path: app.locations.cache.join(name),
+                    description: String::new(),
+                }],
+            );
+        }
+        let mut expected = None;
+        for (index, filter) in [(0, ""), (1, ""), (1, "no matches")] {
+            app.repo_index = index;
+            app.filter = filter.into();
+            let mut terminal = Terminal::new(TestBackend::new(206, 46)).unwrap();
+            terminal.draw(|f| app.draw(f)).unwrap();
+            let buffer = terminal.backend().buffer();
+            let borders = (29..206)
+                .filter(|x| buffer[(*x, 0)].symbol() == "╭")
+                .collect::<Vec<_>>();
+            if let Some(expected) = &expected {
+                assert_eq!(&borders, expected);
+            } else {
+                expected = Some(borders);
+            }
+        }
+    }
+
+    #[test]
+    fn footer_logo_matches_typescript_tiny_font() {
+        let (_temp, app) = app();
+        let mut terminal = Terminal::new(TestBackend::new(206, 46)).unwrap();
+        terminal.draw(|f| app.draw(f)).unwrap();
+        let buffer = terminal.backend().buffer();
+        for (y, expected) in [(41, "█▀▀ █▄▀ █ █   █   █▀▀"), (42, "▄▄█ █ █ █ █▄▄ █▄▄ ▄▄█")]
+        {
+            let actual = (2..23).map(|x| buffer[(x, y)].symbol()).collect::<String>();
+            assert_eq!(actual, expected);
+        }
     }
 
     #[test]
