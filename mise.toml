@@ -1,9 +1,11 @@
-[env]
-
 [tools]
-bun = "latest"
-pnpm = "latest"
+rust = "stable"
 
 [tasks.install]
-run = "pnpm install"
+run = "cargo build --release --locked"
 
+[tasks.test]
+run = "cargo test --locked"
+
+[tasks.check]
+run = "cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings"

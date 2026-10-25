@@ -1,0 +1,99 @@
+# skills-tui configuration
+
+# GitHub: "owner/repo", remote: "https://...", local: "file:///path/to/skills"
+repos = [
+  "vercel-labs/skills",
+  "anthropics/skills",
+  "huggingface/skills",
+  "openai/skills",
+  "msmps/opentui-skill",
+  "vercel-labs/agent-skills",
+  "kepano/obsidian-skills",
+  "obra/superpowers",
+  "mattpocock/skills",
+  "ooiyeefei/ccc",
+  "kenbanks-peng/skills",
+  "sickn33/antigravity-awesome-skills",
+]
+
+# Cache expiry in hours. Updates always fetches current content.
+cache_expiry_hours = 24
+
+[agents]
+enabled = [
+  "claude-code",
+  "codex",
+  "cursor",
+  "gemini-cli",
+  "hermes-agent",
+  "opencode",
+  "pi",
+  # "adal",
+  # "amp",
+  # "antigravity",
+  # "augment",
+  # "cline",
+  # "codebuddy",
+  # "command-code",
+  # "continue",
+  # "github-copilot",
+  # "cortex",
+  # "crush",
+  # "droid",
+  # "goose",
+  # "iflow-cli",
+  # "junie",
+  # "kilo",
+  # "kimi-cli",
+  # "kiro-cli",
+  # "kode",
+  # "mcpjam",
+  # "mistral-vibe",
+  # "mux",
+  # "neovate",
+  # "openclaw",
+  # "openhands",
+  # "pochi",
+  # "qoder",
+  # "qwen-code",
+  # "replit",
+  # "roo",
+  # "trae",
+  # "trae-cn",
+  # "windsurf",
+  # "zencoder",
+]
+
+# Agents that discover skills from the standard .agents/skills paths.
+# These agents can discover every Skill Instance in the shared locations.
+# "both" = reads .agents/skills (local) and ~/.agents/skills (global)
+# "local" = reads .agents/skills (local) only
+[agents.universal]
+both = [
+  "augment",
+  "codex",
+  "gemini-cli",
+  "kimi-cli",
+  "mux",
+  "opencode",
+  "openhands",
+  "pi",
+  "roo",
+  "windsurf",
+]
+local = [
+  "amp",
+  "antigravity",
+  "command-code",
+  "cursor",
+  "goose",
+  "replit",
+]
+
+# To add a custom agent or override builtin paths:
+# [[custom-agents]]
+# name = "my-agent"
+# display = "My Agent"
+# local = ".my-agent/skills/"
+# global = "~/.my-agent/skills/"
+# mode = "copy" # Optional: standalone copies instead of symlinks (default)

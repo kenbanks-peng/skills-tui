@@ -1,94 +1,83 @@
 # skills-tui
 
-A terminal UI for managing AI agent skills.
+A native Rust terminal UI to inspect and manage agent skills.
 
-Browse skill repositories, install/remove skills, check for updates, and control which agents receive which skills, all from one place.
+- Browse configured repositories or installed Skill Instances.
+- Find skills across configured repositories and preview their definitions.
+- Save Skill Selections in User Scope or Project Scope.
+- Restore missing selections and manage Agent Visibility through links or portable copies.
+- Apply repository updates without blocking the interface.
 
-![Built with OpenTUI](https://img.shields.io/badge/built%20with-OpenTUI-blue)
+## Install and run
 
-## Features
-
-- **Browse by repo** — explore skills from configured repositories (GitHub, remote URL, or local `file://` path)
-- **Browse by skill** — see all installed skills and which agents they're linked to
-- **Find** — search for skills across repos
-- **Automatic synchronization** — restore missing selected skills and remove obsolete skills in the background, without blocking startup
-- **Multi-agent support** — install skills to any combination of agents at once
-- **Global & local** — toggle between global (`~/.agents/skills/`) and project-local (`.agents/skills/`) installs
-- **Filter** — type-ahead filtering when browsing skills
-
-
-## Install & Run
+Install [Rust](https://rustup.rs/) and Git, then run:
 
 ```sh
-# Clone the repo
 git clone https://github.com/kenbanks-peng/skills-tui
 cd skills-tui
-
-# Install dependencies
-pnpm install
-
-# Run
-./bin/skills-tui
+cargo install --path . --locked
+skills-tui
 ```
+
+Run from the project directory to manage its Project Scope. For development,
+use `cargo run` or `./bin/skills-tui`. No JavaScript runtime is required.
+
+Use `skills-tui --sync` to synchronize without opening the interface.
+Use `cargo test --locked` to run isolated tests.
 
 ## Configuration
 
-On first run, a default config is created at `~/.config/skills-tui/config.toml`. It defines:
-
-- **`repos`** — skill repositories to browse (GitHub `owner/repo`, `https://` URLs, or `file:///` paths)
-- **`[agents] enabled`** — which agents to manage
-- **`[[custom-agents]]`** — add your own agents with custom skill paths
-
-Example custom agent:
+The first run creates `~/.config/skills-tui/config.toml`. Configure repository
+identifiers (`owner/repo`), Git URLs, or local `file:///` URLs.
+Remote repositories use cached Git checkouts; local repositories are read directly.
+The default cache expiry is 24 hours. Updates fetch the latest remote content.
 
 ```toml
+repos = ["anthropics/skills", "file:///path/to/skills"]
+cache_expiry_hours = 24
+
+[agents]
+enabled = ["claude-code", "codex", "pi"]
+
+[agents.universal]
+both = ["codex", "pi"]
+local = []
+
 [[custom-agents]]
-name = "my-agent"
-display = "My Agent"
-local = ".my-agent/skills/"
-global = "~/.my-agent/skills/"
+name = "portable"
+display = "Portable Agent"
+local = ".portable/skills"
+global = "~/.config/portable/skills"
+mode = "copy" # Default: "symlink"
 ```
 
-Skill selections are saved in `~/.local/state/skills-tui/skill-selections.toml`,
-not in config. Existing installed selections are
-adopted on the first successful synchronization. Missing selected folders are
-restored; deselected and confirmed obsolete skills are removed. Synchronization
-runs at startup, after selections change, and every 30 seconds while open.
+Skill Selections are stored in
+`~/.local/state/skills-tui/skill-selections.toml`, separate from config.
+Synchronization runs at startup, after changes, and every 30 seconds.
+The shared `~/.agents/skills` and `<project>/.agents/skills` locations are managed:
+unselected Skill Instances are removed after adoption. Do not store independent
+skills there.
+
+Copy mode creates self-contained Skill Instances. It preserves unrelated entries
+and removes only copies with a matching ownership marker.
 See [selection and synchronization](docs/skill-link-reconciliation.md).
 
-### Standalone copies for mounted configurations
-
-Custom entries default to symlinks into the shared `~/.agents/skills/`
-(User Scope) or `.agents/skills/` (Project Scope). Set `mode = "copy"`
-when the destination must work without access to those paths:
-
-```toml
-[[custom-agents]]
-name = "pi-linux"
-display = "Pi Linux"
-local = ".pi-linux/skills/"
-global = "~/.config/linux/pi/agent/skills/"
-mode = "copy"
-```
-
-The Settings checkbox deploys self-contained copies, including dereferenced
-content symlinks. Copies refresh at startup, after installs/removals, and after
-updates. Disabling removes only copies managed by Skills TUI; independent
-entries are preserved and reported as conflicts. Managed copies contain a
-`.skills-tui-copy.json` ownership marker and are replaced on refresh, so edit
-the source Skill Instance, not the deployed copy. Copy mode takes precedence
-over universal discovery settings. Only paths inside the mounted destination
-are needed by the receiving runtime.
-
-## Keyboard Controls
+## Keys
 
 | Key | Action |
 |---|---|
-| `Tab` `←` `↑` `→` `↓` | Navigate |
-| `Enter` | Select / Install |
-| `Space` | Toggle selection |
-| `g` | Toggle global/local |
-| `Esc` | Quit |
+| Tab, Shift+Tab, Left, Right | Change panel |
+| Up, Down | Move through a list |
+| Enter, Space | Select, install, remove, or toggle |
+| g | Change Install Scope |
+| / | Focus the filter |
+| Page Up, Page Down | Scroll the preview or update output |
+| r | Synchronize; apply latest versions in Updates |
+| Esc | Clear the filter, then quit |
+| q, Ctrl+C | Quit outside the filter; Ctrl+C always quits |
+
+Agents that discover shared locations directly retain Agent Visibility even
+when their checkbox is cleared.
 
 ## License
 
