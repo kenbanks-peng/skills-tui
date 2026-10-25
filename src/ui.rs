@@ -1,6 +1,6 @@
 use crate::{
     config::{Config, Locations, Scope},
-    deployment, files,
+    files,
     manager::{Action, Manager, Snapshot},
     repository::Skill,
     state::{self, Selections},
@@ -9,21 +9,22 @@ use anyhow::{Result, ensure};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Padding, Paragraph, Wrap},
 };
 use std::{fs, io::IsTerminal, sync::mpsc, thread, time::Duration};
 
-const SERVICES: [&str; 4] = [
-    "Browse by repository",
-    "Browse installed skills",
-    "Find",
-    "Updates",
-];
+const SERVICES: [&str; 4] = ["View by repo", "View by skill", "Find", "Updates"];
 const ACCENT: Color = Color::Rgb(203, 166, 247);
 const TEXT: Color = Color::Rgb(205, 214, 244);
-const MUTED: Color = Color::Rgb(147, 153, 178);
+const MUTED: Color = Color::Rgb(127, 132, 156);
+const BORDER: Color = Color::Rgb(88, 91, 112);
+const LAVENDER: Color = Color::Rgb(180, 190, 254);
+const GREEN: Color = Color::Rgb(166, 227, 161);
+const YELLOW: Color = Color::Rgb(249, 226, 175);
+const SAPPHIRE: Color = Color::Rgb(116, 199, 236);
 const BASE: Color = Color::Rgb(30, 30, 46);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -342,27 +343,25 @@ impl App {
             );
             return;
         }
-        let outer = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Min(1),
-                Constraint::Length(2),
-                Constraint::Length(1),
-            ])
-            .split(area);
-        frame.render_widget(
-            Paragraph::new(format!(" Skills TUI — {}", self.scope.label()))
-                .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-            outer[0],
-        );
-        let columns = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(25), Constraint::Min(1)])
-            .split(outer[1]);
-        let side = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(7), Constraint::Min(1)])
+        let notification = self.busy
+            || !self.snapshot.errors.is_empty()
+            || (!self.status.is_empty() && !self.status.starts_with("Synchronized."));
+        let outer = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(u16::from(notification)),
+            Constraint::Length(5),
+        ])
+        .split(area);
+        let body = outer[1];
+        let columns = Layout::horizontal([Constraint::Length(28), Constraint::Min(1)])
+            .spacing(1)
+            .split(Rect {
+                height: body.height.saturating_sub(2),
+                ..body
+            });
+        let side = Layout::vertical([Constraint::Length(8), Constraint::Min(1)])
+            .spacing(1)
             .split(columns[0]);
         render_list(
             frame,
@@ -372,32 +371,30 @@ impl App {
             self.service,
             self.focus == Focus::Services,
         );
-        let mut settings = vec![format!("Scope: {}", self.scope.label())];
-        settings.extend(self.snapshot.config.agents.iter().map(|a| {
-            format!(
-                "[{}] {}",
-                if self.snapshot.disabled.contains(&a.name) {
-                    " "
-                } else {
-                    "x"
-                },
-                a.display
-            )
-        }));
-        render_list(
-            frame,
-            side[1],
-            "Settings",
-            settings,
-            self.setting_index,
-            self.focus == Focus::Settings,
+        let description = [
+            "Browse and install",
+            "Manage installed skills",
+            "Find skills",
+            "Check for updates",
+        ][self.service];
+        frame.render_widget(
+            Paragraph::new(description)
+                .style(Style::default().fg(Color::Rgb(166, 173, 200)).italic()),
+            Rect::new(
+                side[0].x + 2,
+                side[0].bottom() - 1,
+                side[0].width.saturating_sub(3),
+                1,
+            ),
         );
+        self.draw_settings(frame, side[1]);
         let content = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Min(1),
                 Constraint::Length(if self.service == 3 { 0 } else { 3 }),
             ])
+            .spacing(1)
             .split(columns[1]);
         if self.service == 3 {
             let mut lines = vec![
@@ -436,13 +433,17 @@ impl App {
         } else {
             self.draw_skills(frame, content[0]);
             let search = if self.filter.is_empty() {
-                "Type to filter skills...".into()
+                "› Type to filter skills...".into()
             } else {
-                self.filter.clone()
+                format!("› {}", self.filter)
             };
             frame.render_widget(
                 Paragraph::new(search)
-                    .block(panel("Filter — /: focus", self.focus == Focus::Search)),
+                    .style(Style::default().fg(if self.filter.is_empty() { MUTED } else { TEXT }))
+                    .block(
+                        panel("Filter", self.focus == Focus::Search)
+                            .padding(Padding::horizontal(1)),
+                    ),
                 content[1],
             );
         }
@@ -461,22 +462,102 @@ impl App {
                 .wrap(Wrap { trim: false }),
             outer[2],
         );
-        frame.render_widget(Paragraph::new(" Tab/←/→: panel  ↑/↓: move  Enter/Space: select  g: scope  /: filter  r: refresh  Esc: quit").style(Style::default().fg(MUTED)), outer[3]);
+        draw_footer(frame, outer[3]);
+    }
+    fn draw_settings(&self, frame: &mut Frame, area: Rect) {
+        let block = panel("Settings", self.focus == Focus::Settings);
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        if inner.height == 0 {
+            return;
+        }
+        let scope = if self.scope == Scope::User {
+            "global"
+        } else {
+            "project"
+        };
+        let label = "▶ Scope:";
+        let gap = inner
+            .width
+            .saturating_sub((label.chars().count() + scope.chars().count()) as u16)
+            as usize;
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(
+                    if self.setting_index == 0 {
+                        label
+                    } else {
+                        "  Scope:"
+                    },
+                    Style::default().fg(YELLOW),
+                ),
+                Span::raw(" ".repeat(gap)),
+                Span::styled(
+                    scope,
+                    Style::default()
+                        .fg(if self.scope == Scope::User {
+                            GREEN
+                        } else {
+                            Color::Rgb(250, 179, 135)
+                        })
+                        .bold(),
+                ),
+            ]))
+            .style(if self.setting_index == 0 {
+                Style::default().bg(Color::Rgb(69, 71, 90))
+            } else {
+                Style::default()
+            }),
+            Rect::new(inner.x, inner.y, inner.width, 1),
+        );
+        let agents = self
+            .snapshot
+            .config
+            .agents
+            .iter()
+            .map(|agent| {
+                let checked = !self.snapshot.disabled.contains(&agent.name);
+                ListItem::new(format!(
+                    " [{}] {}",
+                    if checked { "✓" } else { " " },
+                    agent.display
+                ))
+                .style(Style::default().fg(if checked { GREEN } else { TEXT }))
+            })
+            .collect::<Vec<_>>();
+        let mut state = ListState::default().with_selected(self.setting_index.checked_sub(1));
+        frame.render_stateful_widget(
+            List::new(agents)
+                .highlight_style(Style::default().bg(Color::Rgb(69, 71, 90)).fg(YELLOW)),
+            Rect::new(
+                inner.x,
+                inner.y + 2,
+                inner.width,
+                inner.height.saturating_sub(2),
+            ),
+            &mut state,
+        );
     }
     fn draw_skills(&self, frame: &mut Frame, area: Rect) {
+        let rows = self.rows();
+        let widths = repository_widths(
+            area.width,
+            &self.snapshot.config.repos,
+            &rows.iter().map(|r| r.name.clone()).collect::<Vec<_>>(),
+        );
+        let show_preview = self.service != 0 || widths[2] > 0;
         let parts = if self.service == 0 {
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([
-                    Constraint::Percentage(25),
-                    Constraint::Percentage(35),
-                    Constraint::Percentage(40),
-                ])
-                .split(area)
+            Layout::horizontal(
+                widths[..if show_preview { 3 } else { 2 }]
+                    .iter()
+                    .copied()
+                    .map(Constraint::Length),
+            )
+            .spacing(1)
+            .split(area)
         } else {
-            Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .spacing(1)
                 .split(area)
         };
         let offset = usize::from(self.service == 0);
@@ -490,7 +571,6 @@ impl App {
                 self.focus == Focus::Repos,
             );
         }
-        let rows = self.rows();
         let items = rows
             .iter()
             .map(|row| {
@@ -501,7 +581,7 @@ impl App {
                 };
                 format!(
                     "[{}] {}{suffix}",
-                    if self.selected(row) { "x" } else { " " },
+                    if self.selected(row) { "✓" } else { " " },
                     row.name
                 )
             })
@@ -512,53 +592,37 @@ impl App {
             if self.service == 1 {
                 "Installed skills"
             } else {
-                "Discoverable skills"
+                "Skills (Space to select)"
             },
             items,
             self.skill_index,
             self.focus == Focus::Skills,
         );
+        if !show_preview {
+            return;
+        }
         let preview = if let Some(row) = rows.get(self.skill_index) {
-            let visibility = self
-                .snapshot
-                .config
-                .agents
-                .iter()
-                .filter(|a| {
-                    deployment::visible(
-                        a,
-                        &self.snapshot.config,
-                        &self.locations,
-                        self.scope,
-                        &row.name,
-                    )
-                })
-                .map(|a| a.display.as_str())
-                .collect::<Vec<_>>()
-                .join(", ");
-            let text = fs::read_to_string(row.path.join("SKILL.md"))
-                .unwrap_or_else(|e| format!("Cannot read Skill definition: {e}"));
-            format!(
-                "{}\n{}\nAgent Visibility: {}\n\n{}",
-                row.name,
-                row.path.display(),
-                if visibility.is_empty() {
-                    "none"
-                } else {
-                    &visibility
-                },
-                text
+            let text = fs::read_to_string(row.path.join("SKILL.md"));
+            preview_lines(
+                &row.name,
+                &row.path.join("SKILL.md").display().to_string(),
+                text.as_deref().ok(),
             )
-        } else if self.busy {
-            "Reading repositories...".into()
         } else {
-            "No skills match. Repository errors appear in Updates.".into()
+            vec![Line::styled(
+                if self.busy {
+                    "Reading repositories..."
+                } else {
+                    "Select a skill to preview"
+                },
+                Style::default().fg(MUTED),
+            )]
         };
         frame.render_widget(
             Paragraph::new(preview)
                 .wrap(Wrap { trim: false })
                 .scroll((self.preview_scroll, 0))
-                .block(panel("Skill preview — PgUp/PgDn", false)),
+                .block(panel("Preview", false)),
             parts[offset + 1],
         );
     }
@@ -566,8 +630,15 @@ impl App {
 fn panel(title: &str, focused: bool) -> Block<'_> {
     Block::default()
         .borders(Borders::ALL)
-        .title(title)
-        .border_style(Style::default().fg(if focused { ACCENT } else { MUTED }))
+        .title(format!(" {title} "))
+        .title_style(Style::default().fg(if focused { LAVENDER } else { BORDER }))
+        .border_type(if focused {
+            BorderType::Double
+        } else {
+            BorderType::Rounded
+        })
+        .padding(Padding::new(1, 1, 1, 1))
+        .border_style(Style::default().fg(if focused { LAVENDER } else { BORDER }))
 }
 fn render_list(
     frame: &mut Frame,
@@ -578,7 +649,26 @@ fn render_list(
     focused: bool,
 ) {
     let count = items.len();
-    let items = items.into_iter().map(ListItem::new).collect::<Vec<_>>();
+    let cursor = title == "Services" || title == "Repositories";
+    let items = items
+        .into_iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let checked = item.starts_with("[✓]");
+            let prefix = if cursor && i == index {
+                "▶ "
+            } else if cursor {
+                "  "
+            } else {
+                " "
+            };
+            ListItem::new(format!("{prefix}{item}")).style(Style::default().fg(if checked {
+                GREEN
+            } else {
+                TEXT
+            }))
+        })
+        .collect::<Vec<_>>();
     let mut state = ListState::default().with_selected(if count == 0 {
         None
     } else {
@@ -587,14 +677,160 @@ fn render_list(
     frame.render_stateful_widget(
         List::new(items)
             .block(panel(title, focused))
-            .highlight_style(
-                Style::default()
-                    .bg(Color::Rgb(69, 71, 90))
-                    .add_modifier(Modifier::BOLD),
-            )
-            .highlight_symbol(if focused { "> " } else { "  " }),
+            .highlight_style(Style::default().bg(Color::Rgb(69, 71, 90)).fg(YELLOW)),
         area,
         &mut state,
+    );
+}
+// Use the same preferred widths and surplus distribution as the TypeScript UI.
+fn repository_widths(width: u16, repos: &[String], skills: &[String]) -> [u16; 3] {
+    let longest = |values: &[String]| {
+        values
+            .iter()
+            .map(|v| v.chars().count())
+            .max()
+            .unwrap_or(0)
+            .min(u16::MAX as usize - 9) as u16
+    };
+    let preferred = [14.max(longest(repos) + 6), 36.max(longest(skills) + 9), 36];
+    let available = width.saturating_sub(2);
+    let total: u32 = preferred.iter().map(|v| u32::from(*v)).sum();
+    if u32::from(available) >= total {
+        let surplus = available - total as u16;
+        return std::array::from_fn(|i| {
+            preferred[i] + surplus / 3 + u16::from((i as u16) < surplus % 3)
+        });
+    }
+    let available = width.saturating_sub(1);
+    let minimum = 14 + 36;
+    let remaining = available.saturating_sub(minimum);
+    let deficits = [preferred[0] - 14, preferred[1] - 36];
+    let total = u32::from(deficits[0]) + u32::from(deficits[1]);
+    let extra = (u32::from(remaining) * u32::from(deficits[0]) + total / 2)
+        .checked_div(total)
+        .unwrap_or(0)
+        .min(u32::from(deficits[0])) as u16;
+    [14 + extra, available.saturating_sub(14 + extra), 0]
+}
+fn truncate(text: &str, limit: usize) -> String {
+    if text.chars().count() <= limit {
+        text.into()
+    } else {
+        format!(
+            "{}...",
+            text.chars()
+                .take(limit.saturating_sub(3))
+                .collect::<String>()
+        )
+    }
+}
+fn preview_lines(name: &str, path: &str, content: Option<&str>) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        Line::styled(truncate(name, 34), Style::default().fg(YELLOW).bold()),
+        Line::default(),
+    ];
+    let Some(content) = content else {
+        lines.push(Line::styled(
+            "No SKILL.md preview available",
+            Style::default().fg(MUTED),
+        ));
+        return lines;
+    };
+    lines.push(Line::styled(truncate(path, 34), Style::default().fg(MUTED)));
+    lines.push(Line::default());
+    let mut summary = Vec::new();
+    let mut past_title = false;
+    for line in content.lines().map(str::trim) {
+        if line.is_empty() {
+            if !summary.is_empty() {
+                break;
+            }
+            continue;
+        }
+        if !past_title && line.starts_with('#') {
+            past_title = true;
+            continue;
+        }
+        if line.starts_with("```") {
+            continue;
+        }
+        summary.push(line);
+    }
+    if !summary.is_empty() {
+        lines.push(Line::styled("Summary", Style::default().fg(LAVENDER)));
+        lines.push(Line::raw(truncate(&summary.join(" "), 180)));
+    }
+    let mut section = content.lines().skip_while(|line| {
+        let line = line.trim().to_lowercase();
+        !(line.starts_with('#') && line.contains("when to use"))
+    });
+    section.next();
+    let snippet = section
+        .map(str::trim)
+        .take_while(|line| !line.starts_with('#'))
+        .filter(|line| !line.is_empty())
+        .take(3)
+        .map(|line| line.strip_prefix('-').map(str::trim_start).unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !snippet.is_empty() {
+        lines.push(Line::default());
+        lines.push(Line::styled("When to use", Style::default().fg(LAVENDER)));
+        lines.push(Line::styled(
+            truncate(&snippet, 180),
+            Style::default().fg(Color::Rgb(186, 194, 222)),
+        ));
+    }
+    lines
+}
+fn draw_footer(frame: &mut Frame, area: Rect) {
+    let block = Block::bordered().border_style(Style::default().fg(Color::Rgb(69, 71, 90)));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let logo = ["█▀▀ █ █ ▀█▀ █   █   █▀▀", "▄██ █▀▄ ▄█▄ █▄▄ █▄▄ ▄██"];
+    for (i, line) in logo.iter().enumerate() {
+        frame.render_widget(
+            Paragraph::new(*line).style(Style::default().fg(ACCENT)),
+            Rect::new(
+                inner.x + 1,
+                inner.y + i as u16,
+                24.min(inner.width.saturating_sub(1)),
+                1,
+            ),
+        );
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("   ⎼⎼⊰", Style::default().fg(GREEN)),
+            Span::styled("⦅@", Style::default().fg(Color::Rgb(243, 139, 168))),
+        ])),
+        Rect::new(inner.x + 1, inner.y + 2, inner.width.saturating_sub(1), 1),
+    );
+    let mut spans = Vec::new();
+    for (i, (label, key)) in [
+        ("Navigate: ", "Tab/Arrows"),
+        ("Select: ", "Enter"),
+        ("Toggle: ", "Space"),
+        ("Quit: ", "Esc"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        if i > 0 {
+            spans.push(Span::raw("   "));
+        }
+        spans.push(Span::styled(*label, Style::default().fg(SAPPHIRE)));
+        spans.push(Span::styled(*key, Style::default().fg(MUTED)));
+    }
+    let help = Rect::new(
+        inner.x + 26,
+        inner.y + inner.height / 2,
+        inner.width.saturating_sub(27),
+        1,
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(spans)).alignment(Alignment::Right),
+        help,
     );
 }
 pub fn run(manager: Manager) -> Result<()> {
@@ -704,10 +940,68 @@ mod tests {
                 .iter()
                 .map(|c| c.symbol())
                 .collect();
-            assert!(text.contains("Skills TUI"));
+            assert!(text.contains("Services"));
             assert!(text.contains("Settings"));
         }
     }
+    #[test]
+    fn reference_layout_has_compact_labels_and_footer() {
+        let (_temp, mut app) = app();
+        app.busy = false;
+        app.status = "Synchronized. 0 Skill Instances changed.".into();
+        let mut terminal = Terminal::new(TestBackend::new(206, 46)).unwrap();
+        terminal.draw(|f| app.draw(f)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let text: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        for label in [
+            "View by repo",
+            "View by skill",
+            "Skills (Space to select)",
+            "Preview",
+            "Navigate:",
+            "global",
+            "Browse and install",
+        ] {
+            assert!(text.contains(label), "missing {label}");
+        }
+        assert!(!text.contains("Synchronized."));
+        assert_eq!(buffer[(0, 1)].symbol(), "╔");
+        assert_eq!(buffer[(29, 1)].symbol(), "╭");
+    }
+
+    #[test]
+    fn preview_matches_reference_snippets() {
+        let content = "# Example\n\nA short summary.\n\n## When to use\n- First case\n- Second case\n- Third case\n- Hidden fourth case\n## Details\nHidden full document";
+        let lines = preview_lines("example", "/skills/example/SKILL.md", Some(content));
+        let text = lines
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains("Summary\nA short summary."));
+        assert!(text.contains("When to use\nFirst case Second case Third case"));
+        assert!(!text.contains("Hidden"));
+        assert!(!text.contains("Agent Visibility"));
+        assert_eq!(truncate("é".repeat(181).as_str(), 180).chars().count(), 180);
+        assert!(
+            preview_lines("example", "path", None)
+                .iter()
+                .any(|line| line.to_string().contains("No SKILL.md"))
+        );
+    }
+
+    #[test]
+    fn repository_panels_fit_and_hide_preview_when_narrow() {
+        let repos = vec!["kenbanks-peng/skills".into()];
+        let skills = vec!["html-custom-editing-interfaces".into()];
+        let widths = repository_widths(176, &repos, &skills);
+        assert_eq!(widths.iter().sum::<u16>() + 2, 176);
+        assert!(widths[2] >= 36);
+        let widths = repository_widths(50, &repos, &skills);
+        assert_eq!(widths[2], 0);
+        assert_eq!(widths[0] + widths[1] + 1, 50);
+    }
+
     #[test]
     fn filter_input_does_not_trigger_commands() {
         let (_temp, mut app) = app();
