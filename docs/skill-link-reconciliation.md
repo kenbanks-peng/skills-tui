@@ -1,6 +1,6 @@
 # Skill selection and synchronization
 
-Skills TUI config is the source of truth for selected skills. Skills TUI does not
+Skills TUI state is the source of truth for selected skills. Skills TUI does not
 read or change another tool's lock files. The skills CLI is used to list remote
 repository skills and install explicitly named skills, not to determine selections.
 
@@ -13,18 +13,17 @@ be checked successfully before first-run adoption can remove any content.
 
 If an installed name exists in multiple configured repositories, adoption stops
 for that scope and reports the conflict. Set the repository explicitly in the
-selection config below, including all skills you want to keep. Skills TUI does
+selection state below, including all skills you want to keep. Skills TUI does
 not guess which repository supplied that Skill Instance.
 
-## Configuration
+## Selection state
 
-Selections are saved in `~/.config/skills-tui/config.toml`. User Scope and each
+Settings remain in `~/.config/skills-tui/config.toml`.
+Selections are saved in `~/.local/state/skills-tui/skill-selections.toml`. User Scope and each
 Project Scope have separate lists. A missing list means adoption has not completed;
 an empty list means no skills are selected.
 
 ```toml
-repos = ["owner/repo"]
-
 [skills]
 user = [{ repo = "owner/repo", name = "example" }]
 
@@ -32,8 +31,8 @@ user = [{ repo = "owner/repo", name = "example" }]
 "/absolute/path/to/project" = [{ repo = "owner/repo", name = "example" }]
 ```
 
-The TUI saves install/remove selections immediately. Other config sections and
-their comments remain unchanged. Project Scope means the current working directory;
+The TUI saves install/remove selections immediately. It does not write to
+`config.toml`. Project Scope means the current working directory;
 other projects are not modified.
 
 ## Reconciliation
@@ -63,7 +62,7 @@ next check. Edit repository content rather than deployed copies, because an upda
 replaces deployed content.
 
 A failed or incomplete repository check preserves that repository's selections
-and content. It is not proof of deletion. Malformed selection config prevents
+and content. It is not proof of deletion. Malformed selection state prevents
 cleanup. Errors are reported; other repositories and entries can still synchronize.
 Configuration changes during repository checks cause the pass to stop and retry
 on the next check rather than apply an old selection snapshot.

@@ -16,9 +16,11 @@ import { SkillManager, SkillSelectionStore } from "./skill-management";
 let root: string;
 let config: string;
 let shared: string;
+let state: string;
 beforeEach(() => {
 	root = mkdtempSync(join(tmpdir(), "skills-tui-selection-"));
 	config = join(root, "config.toml");
+	state = join(root, "state", "skill-selections.toml");
 	shared = join(root, "home", ".agents", "skills");
 	writeFileSync(config, 'repos = ["owner/repo"]\n');
 	mkdirSync(shared, { recursive: true });
@@ -30,10 +32,11 @@ function deploy(name: string) {
 	writeFileSync(join(shared, name, "SKILL.md"), "# " + name);
 }
 
-test("adopts existing installed selections into TUI config without a CLI lock", async () => {
+test("adopts existing installed selections into state without changing config", async () => {
 	deploy("kept");
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project: join(root, "project"),
 		discover: async () => ["kept", "not-selected"],
@@ -43,15 +46,15 @@ test("adopts existing installed selections into TUI config without a CLI lock", 
 	});
 	expect((await manager.reconcile()).errors).toEqual([]);
 	expect(
-		new SkillSelectionStore(config).read(true, join(root, "project")),
+		new SkillSelectionStore(state).read(true, join(root, "project")),
 	).toEqual([{ repo: "owner/repo", name: "kept" }]);
 	expect(existsSync(join(shared, "not-selected"))).toBe(false);
-	expect(readFileSync(config, "utf8")).toContain("kept");
+	expect(readFileSync(config, "utf8")).toBe('repos = ["owner/repo"]\n');
 });
 
 test("repairs missing selections and removes only confirmed obsolete or deselected content", async () => {
 	const project = join(root, "project");
-	const store = new SkillSelectionStore(config);
+	const store = new SkillSelectionStore(state);
 	store.write(true, project, [
 		{ repo: "owner/repo", name: "missing" },
 		{ repo: "owner/repo", name: "aven" },
@@ -61,6 +64,7 @@ test("repairs missing selections and removes only confirmed obsolete or deselect
 	const installed: string[] = [];
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project,
 		discover: async () => ["missing", "not-selected"],
@@ -83,7 +87,7 @@ test("repairs missing selections and removes only confirmed obsolete or deselect
 test("a failed repository check preserves its selections and content while other sources reconcile", async () => {
 	writeFileSync(config, 'repos = ["offline/repo", "owner/repo"]\n');
 	const project = join(root, "project");
-	const store = new SkillSelectionStore(config);
+	const store = new SkillSelectionStore(state);
 	store.write(true, project, [
 		{ repo: "offline/repo", name: "keep-offline" },
 		{ repo: "owner/repo", name: "deleted" },
@@ -92,6 +96,7 @@ test("a failed repository check preserves its selections and content while other
 	deploy("deleted");
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project,
 		discover: async (repo) => {
@@ -115,6 +120,7 @@ test("TUI changes persist and remain independent across scopes and manager resta
 	const installs: string[] = [];
 	const options = {
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project,
 		discover: async () => ["chosen"],
@@ -135,8 +141,8 @@ test("TUI changes persist and remain independent across scopes and manager resta
 	await manager.select("owner/repo", "chosen", true, true);
 	await manager.select("owner/repo", "chosen", false, true);
 	await manager.select("owner/repo", "chosen", true, false);
-	expect(new SkillSelectionStore(config).read(true, project)).toEqual([]);
-	expect(new SkillSelectionStore(config).read(false, project)).toEqual([
+	expect(new SkillSelectionStore(state).read(true, project)).toEqual([]);
+	expect(new SkillSelectionStore(state).read(false, project)).toEqual([
 		{ repo: "owner/repo", name: "chosen" },
 	]);
 	await new SkillManager(options).reconcile();
@@ -155,6 +161,7 @@ test("startup refresh installs selected skills even when content exists and keep
 	deploy("chosen");
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project: join(root, "project"),
 		discover: async () => ["chosen", "not-selected"],
@@ -175,6 +182,7 @@ test("ambiguous first-run names are not assigned to an arbitrary repository", as
 	deploy("unknown");
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project: join(root, "project"),
 		discover: async () => ["shared-name"],
@@ -187,15 +195,16 @@ test("ambiguous first-run names are not assigned to an arbitrary repository", as
 	expect(existsSync(join(shared, "shared-name"))).toBe(true);
 	expect(existsSync(join(shared, "unknown"))).toBe(true);
 	expect(
-		new SkillSelectionStore(config).read(true, join(root, "project")),
+		new SkillSelectionStore(state).read(true, join(root, "project")),
 	).toBeNull();
 });
 
-test("first-run repository failure changes neither content nor selection config", async () => {
+test("first-run repository failure changes neither content nor selection state", async () => {
 	deploy("existing");
 	const before = readFileSync(config, "utf8");
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project: join(root, "project"),
 		discover: async () => {
@@ -212,12 +221,13 @@ test("first-run repository failure changes neither content nor selection config"
 
 test("failed installation remains selected and is repaired on the next pass", async () => {
 	const project = join(root, "project");
-	new SkillSelectionStore(config).write(true, project, [
+	new SkillSelectionStore(state).write(true, project, [
 		{ repo: "owner/repo", name: "retry" },
 	]);
 	let offline = true;
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project,
 		discover: async () => ["retry"],
@@ -227,7 +237,7 @@ test("failed installation remains selected and is repaired on the next pass", as
 		},
 	});
 	expect((await manager.reconcile()).errors).toHaveLength(1);
-	expect(new SkillSelectionStore(config).read(true, project)).toEqual([
+	expect(new SkillSelectionStore(state).read(true, project)).toEqual([
 		{ repo: "owner/repo", name: "retry" },
 	]);
 	offline = false;
@@ -239,6 +249,7 @@ test("configuration edits during discovery prevent changes based on an old snaps
 	deploy("existing");
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project: join(root, "project"),
 		discover: async () => {
@@ -255,12 +266,14 @@ test("configuration edits during discovery prevent changes based on an old snaps
 
 test("invalid selections never trigger cleanup", async () => {
 	deploy("existing");
+	mkdirSync(join(root, "state"));
 	writeFileSync(
-		config,
-		'repos = ["owner/repo"]\n[skills]\nuser = [{ repo = "owner/repo", name = "../outside" }]\n',
+		state,
+		'[skills]\nuser = [{ repo = "owner/repo", name = "../outside" }]\n',
 	);
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project: join(root, "project"),
 		discover: async () => [],
@@ -272,17 +285,21 @@ test("invalid selections never trigger cleanup", async () => {
 	expect(existsSync(join(shared, "existing"))).toBe(true);
 });
 
-test("saving selections preserves a config symlink and updates its target", () => {
+test("saving selections leaves a symlinked config and its target unchanged", () => {
 	const target = join(root, "dotfiles.toml");
-	writeFileSync(target, readFileSync(config));
+	const original = readFileSync(config, "utf8");
+	writeFileSync(target, original);
 	rmSync(config);
 	symlinkSync(target, config);
-	const store = new SkillSelectionStore(config);
+	const store = new SkillSelectionStore(state);
 	store.write(true, join(root, "project"), [
 		{ repo: "owner/repo", name: "kept" },
 	]);
 	expect(lstatSync(config).isSymbolicLink()).toBe(true);
-	expect(readFileSync(target, "utf8")).toContain("kept");
+	expect(readFileSync(target, "utf8")).toBe(original);
+	expect(store.read(true, join(root, "project"))).toEqual([
+		{ repo: "owner/repo", name: "kept" },
+	]);
 });
 
 test("ordinary files do not prevent adoption and remain unchanged", async () => {
@@ -290,6 +307,7 @@ test("ordinary files do not prevent adoption and remain unchanged", async () => 
 	writeFileSync(join(shared, "notes.txt"), "independent file");
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project: join(root, "project"),
 		discover: async () => ["kept"],
@@ -302,18 +320,19 @@ test("ordinary files do not prevent adoption and remain unchanged", async () => 
 		"independent file",
 	);
 	expect(
-		new SkillSelectionStore(config).read(true, join(root, "project")),
+		new SkillSelectionStore(state).read(true, join(root, "project")),
 	).toEqual([{ repo: "owner/repo", name: "kept" }]);
 });
 
 test("removing a repository removes its selection without depending on that repository", async () => {
 	const project = join(root, "project");
-	new SkillSelectionStore(config).write(true, project, [
+	new SkillSelectionStore(state).write(true, project, [
 		{ repo: "removed/repo", name: "removed" },
 	]);
 	deploy("removed");
 	const manager = new SkillManager({
 		configPath: config,
+		selectionsPath: state,
 		home: join(root, "home"),
 		project,
 		discover: async (repo) => {
@@ -326,5 +345,5 @@ test("removing a repository removes its selection without depending on that repo
 	});
 	expect((await manager.reconcile()).errors).toEqual([]);
 	expect(existsSync(join(shared, "removed"))).toBe(false);
-	expect(new SkillSelectionStore(config).read(true, project)).toEqual([]);
+	expect(new SkillSelectionStore(state).read(true, project)).toEqual([]);
 });

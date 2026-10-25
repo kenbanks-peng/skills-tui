@@ -49,7 +49,8 @@ local = ".my-agent/skills/"
 global = "~/.my-agent/skills/"
 ```
 
-Skill selections are saved in this config. Existing installed selections are
+Skill selections are saved in `~/.local/state/skills-tui/skill-selections.toml`,
+not in config. Existing installed selections are
 adopted on the first successful synchronization. Missing selected folders are
 restored; deselected and confirmed obsolete skills are removed. Synchronization
 runs at startup, after selections change, and every 30 seconds while open.

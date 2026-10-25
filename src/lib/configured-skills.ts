@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	configPath,
+	selectionsPath,
 	loadAgents,
 	loadDisabledAgents,
 	loadUniversalAgents,
@@ -90,6 +91,7 @@ async function install(
 
 const manager = new SkillManager({
 	configPath,
+	selectionsPath,
 	home: homedir(),
 	project: process.cwd(),
 	discover,

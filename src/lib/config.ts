@@ -14,6 +14,7 @@ export const configDir = join(homedir(), ".config", "skills-tui");
 export const cacheDir = join(homedir(), ".cache", "skills-tui");
 export const stateDir = join(homedir(), ".local", "state", "skills-tui");
 export const configPath = join(configDir, "config.toml");
+export const selectionsPath = join(stateDir, "skill-selections.toml");
 export const disabledAgentsPath = join(stateDir, "disabled-agents.json");
 
 export interface AgentConfig {
@@ -183,7 +184,13 @@ export async function loadAgents(): Promise<AgentConfig[]> {
 		// [[custom-agents]] — always enabled, overrides builtins
 		const customAgents: (
 			| string
-			| { name: string; display?: string; local?: string; global?: string; mode?: "symlink" | "copy" }
+			| {
+					name: string;
+					display?: string;
+					local?: string;
+					global?: string;
+					mode?: "symlink" | "copy";
+			  }
 		)[] = Array.isArray(config?.["custom-agents"])
 			? config["custom-agents"]
 			: [];

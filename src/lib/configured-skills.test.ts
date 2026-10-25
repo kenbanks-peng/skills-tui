@@ -96,11 +96,18 @@ mode = "copy"
 		expect(child.stderr).toBe("");
 		expect(child.status).toBe(0);
 	}
+	const original = readFileSync(config, "utf8");
 	run("synchronizeConfiguredSkills({ refresh: true })");
 	expect(readFileSync(join(shared, "chosen", "SKILL.md"), "utf8")).toBe(
 		"# Upstream",
 	);
-	expect(readFileSync(config, "utf8")).toContain("chosen");
+	expect(readFileSync(config, "utf8")).toBe(original);
+	expect(
+		readFileSync(
+			join(home, ".local", "state", "skills-tui", "skill-selections.toml"),
+			"utf8",
+		),
+	).toContain("chosen");
 	expect(
 		lstatSync(join(home, ".fixture-link", "skills", "chosen")).isSymbolicLink(),
 	).toBe(true);
@@ -130,6 +137,7 @@ mode = "copy"
 	);
 	run("synchronizeConfiguredSkills()");
 	expect(existsSync(join(shared, "chosen"))).toBe(false);
+	expect(readFileSync(config, "utf8")).toBe(original);
 });
 
 test("remote inventory failures preserve deployments; explicit installs repair without CLI update tracking", () => {

@@ -1,5 +1,6 @@
 import {
 	lstatSync,
+	mkdirSync,
 	mkdtempSync,
 	realpathSync,
 	readFileSync,
@@ -10,7 +11,6 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import { parse, stringify } from "smol-toml";
 
 export interface SkillSelection {
@@ -26,12 +26,21 @@ function readConfig(path: string): Config {
 	return parse(readFileSync(path, "utf8")) as Config;
 }
 
-// Only Skills TUI config records intent. An absent scope means first-run adoption;
+// Only Skills TUI state records intent. An absent scope means first-run adoption;
 // an empty list means the user has deliberately selected no skills.
 export class SkillSelectionStore {
 	constructor(readonly path: string) {}
+	private readState(): Config {
+		try {
+			return readConfig(this.path);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+			throw error;
+		}
+	}
+
 	read(isGlobal: boolean, project: string): SkillSelection[] | null {
-		const config = readConfig(this.path);
+		const config = this.readState();
 		const values = isGlobal
 			? config.skills?.user
 			: config.skills?.projects?.[resolve(project)];
@@ -59,35 +68,26 @@ export class SkillSelectionStore {
 		project: string,
 		selections: SkillSelection[],
 	): void {
-		const config = readConfig(this.path);
+		const config = this.readState();
 		config.skills ??= {};
 		if (isGlobal) config.skills.user = selections;
 		else {
 			config.skills.projects ??= {};
 			config.skills.projects[resolve(project)] = selections;
 		}
-		const original = readFileSync(this.path, "utf8");
-		let inSelections = false;
-		const otherSections = original
-			.split("\n")
-			.filter((line) => {
-				if (/^\s*\[/.test(line))
-					inSelections = /^\s*\[{1,2}skills(?:\.|\])/.test(line);
-				return !inSelections;
-			})
-			.join("\n")
-			.trimEnd();
-		const updated =
-			otherSections + "\n\n" + stringify({ skills: config.skills });
-		// Verify the section-only rewrite before replacing the config.
-		if (!isDeepStrictEqual(parse(updated), parse(stringify(config)))) {
-			throw new Error("Could not safely update skill selections in config");
-		}
-		if (updated === original) return;
-		const target = realpathSync(this.path);
-		const temporary = mkdtempSync(join(dirname(target), ".skills-tui-config-"));
+		const updated = stringify({ skills: config.skills });
 		try {
-			const temp = join(temporary, "config.toml");
+			if (readFileSync(this.path, "utf8") === updated) return;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		}
+		mkdirSync(dirname(this.path), { recursive: true });
+		const target = statSync(this.path, { throwIfNoEntry: false })
+			? realpathSync(this.path)
+			: this.path;
+		const temporary = mkdtempSync(join(dirname(target), ".skills-tui-state-"));
+		try {
+			const temp = join(temporary, "skill-selections.toml");
 			writeFileSync(temp, updated, { mode: 0o600 });
 			renameSync(temp, target);
 		} finally {
@@ -98,6 +98,7 @@ export class SkillSelectionStore {
 
 interface ManagementOptions {
 	configPath: string;
+	selectionsPath: string;
 	home: string;
 	project: string;
 	discover: (repo: string) => Promise<string[]>;
@@ -111,7 +112,7 @@ export interface SkillReconciliation {
 export class SkillManager {
 	readonly store: SkillSelectionStore;
 	constructor(readonly options: ManagementOptions) {
-		this.store = new SkillSelectionStore(options.configPath);
+		this.store = new SkillSelectionStore(options.selectionsPath);
 	}
 	private pending: Promise<unknown> = Promise.resolve();
 	private enqueue<T>(operation: () => Promise<T>): Promise<T> {
@@ -235,7 +236,7 @@ export class SkillManager {
 								result.errors.push({
 									path: join(directory, name),
 									error: new Error(
-										"Choose a repository for this skill in [skills] config before adoption",
+										"Choose a repository for this skill in the skill selection state before adoption",
 									),
 								});
 							} else if (matches[0])

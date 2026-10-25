@@ -1,6 +1,6 @@
 # ADR-0001: Skills TUI config owns skill selections
 
-Status: Accepted
+Status: Storage location superseded by [ADR-0002](0002-separate-selection-state.md).
 
 ## Decision
 
