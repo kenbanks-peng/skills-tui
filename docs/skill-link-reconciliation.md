@@ -38,9 +38,10 @@ other projects are not modified.
 
 ## Reconciliation
 
-Synchronization runs before the interface opens, after skill selections change,
-and every 30 seconds while the interface is open. The Check/Update action also
-synchronizes the displayed scope.
+Synchronization starts in the background after the interface mounts, runs after
+skill selections change, and repeats every 30 seconds while the interface is open.
+The interface does not wait for repository checks. A status line shows when a
+check is running. The Check/Update action also synchronizes the displayed scope.
 
 For each scope, Skills TUI:
 - Keeps selected skills that still exist in their configured repository.
@@ -55,11 +56,11 @@ The shared Skill Locations are `~/.agents/skills/` in User Scope and
 `<project>/.agents/skills/` in Project Scope. Do not use them to store independent,
 unselected skills: they are managed by Skills TUI.
 
-Startup and Check/Update reinstall selected skills from their current upstream
-content. The 30-second checks repair missing content and detect removed skills;
-they do not replace intact selected folders on every check. Failed installations
-remain selected and are retried on the next check. Edit repository content rather
-than deployed copies, because an update replaces deployed content.
+Startup and the 30-second checks repair missing content and detect removed skills.
+They do not reinstall intact selected folders. Use Check/Update to refresh selected
+content from upstream. Failed installations remain selected and are retried on the
+next check. Edit repository content rather than deployed copies, because an update
+replaces deployed content.
 
 A failed or incomplete repository check preserves that repository's selections
 and content. It is not proof of deletion. Malformed selection config prevents
@@ -74,8 +75,17 @@ a checkbox applies to both scopes. Enabling an agent creates links to existing
 shared Skill Instances; disabling removes its links, including dead links.
 
 Independent agent entries and unrelated links remain unchanged. Conflicts are
-reported rather than overwritten. Locations shared with another selected agent
-are preserved.
+reported rather than overwritten. The interface shows one warning and a count of
+additional errors, without stack traces. Check/Update shows the full error list.
+Locations shared with another selected agent are preserved.
+
+An old relative link can become broken when an agent directory is linked into a
+dotfiles repository. If its relative text names exactly the matching shared
+Skill Instance from the configured agent location, and its actual target is
+confirmed missing, synchronization replaces it with an absolute link. Disabling
+the agent removes that stale link instead. Live links to other locations and
+unrelated dead links are not changed. The entry, directory aliases, and missing
+target are checked again before repair or removal.
 
 Agents configured to discover the shared location directly need no links.
 Unchecking them cannot prevent Agent Visibility. Copy mode instead deploys

@@ -130,6 +130,16 @@ async function synchronizeAgents(
 	return result;
 }
 
+export function summarizeSkillSyncErrors(
+	errors: SkillReconciliation["errors"],
+): string | null {
+	if (!errors.length) return null;
+	const { path, error } = errors[0];
+	const message = error instanceof Error ? error.message : String(error);
+	const more = errors.length > 1 ? ` (+${errors.length - 1} more)` : "";
+	return `Could not sync ${path}: ${message}${more}`;
+}
+
 export function synchronizeConfiguredSkills(
 	options: { refresh?: boolean; scopes?: boolean[] } = {},
 ): Promise<SkillReconciliation> {

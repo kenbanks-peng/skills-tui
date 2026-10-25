@@ -12,7 +12,10 @@ import {
 	listLocalSkills,
 	loadSkillsFromRepo,
 } from "#lib/skills";
-import { setConfiguredSkillSelection } from "#lib/configured-skills";
+import {
+	setConfiguredSkillSelection,
+	summarizeSkillSyncErrors,
+} from "#lib/configured-skills";
 import { theme } from "#lib/theme";
 import {
 	fileUrlToPath,
@@ -232,12 +235,8 @@ export function ViewByRepo({
 				currentView.current.isGlobal === isGlobal
 			)
 				setSelectedSkills(installed);
-			if (result.errors.length)
-				onError(
-					result.errors
-						.map(({ path, error }) => `${path}: ${String(error)}`)
-						.join("; "),
-				);
+			const warning = summarizeSkillSyncErrors(result.errors);
+			if (warning) onError(warning);
 			onInstallComplete();
 		} catch (error) {
 			onError(String(error));

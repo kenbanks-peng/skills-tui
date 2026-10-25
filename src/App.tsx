@@ -21,7 +21,10 @@ import {
 	type UniversalAgents,
 } from "#lib/config";
 import { pruneCache } from "#lib/skills";
-import { synchronizeConfiguredSkills } from "#lib/configured-skills";
+import {
+	synchronizeConfiguredSkills,
+	summarizeSkillSyncErrors,
+} from "#lib/configured-skills";
 import { theme } from "#lib/theme";
 import { syncAgentSkills } from "#lib/sync-agent-skills";
 import { Find } from "#services/Find";
@@ -55,6 +58,8 @@ export function App() {
 	const [activeSettingIndex, setActiveSettingIndex] = useState(0);
 	const [focusedColumn, setFocusedColumn] = useState<FocusedColumn>("services");
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [syncError, setSyncError] = useState<string | null>(null);
+	const [syncing, setSyncing] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [repoCacheRefreshKey, setRepoCacheRefreshKey] = useState(0);
 	const [searchFilter, setSearchFilter] = useState("");
@@ -88,9 +93,10 @@ export function App() {
 	useEffect(() => {
 		let active = true;
 		let running = false;
-		const timer = setInterval(async () => {
+		const synchronize = async () => {
 			if (running) return;
 			running = true;
+			setSyncing(true);
 			try {
 				const result = await synchronizeConfiguredSkills();
 				const [repoList, agentList, disabled, universal] = await Promise.all([
@@ -124,18 +130,19 @@ export function App() {
 				);
 				setRefreshKey((key) => key + 1);
 				setRepoCacheRefreshKey((key) => key + 1);
-				if (result.errors.length)
-					setErrorMessage(
-						result.errors
-							.map(({ path, error }) => `${path}: ${String(error)}`)
-							.join("; "),
-					);
+				setSyncError(summarizeSkillSyncErrors(result.errors));
 			} catch (error) {
-				if (active) setErrorMessage(String(error));
+				if (active)
+					setSyncError(error instanceof Error ? error.message : String(error));
 			} finally {
 				running = false;
+				if (active) setSyncing(false);
 			}
-		}, 30_000);
+		};
+		// Start once after mounting; never hold up the first frame or reinstall
+		// intact selections on routine startup/periodic checks.
+		void synchronize();
+		const timer = setInterval(synchronize, 30_000);
 		return () => {
 			active = false;
 			clearInterval(timer);
@@ -339,13 +346,7 @@ export function App() {
 							);
 							setSelectedAgents(next);
 							setRefreshKey((key) => key + 1);
-							if (result.errors.length > 0) {
-								setErrorMessage(
-									`Could not fully sync ${agent.display}: ${result.errors.map(({ path, error }) => `${path}: ${String(error)}`).join("; ")}`,
-								);
-							} else {
-								setErrorMessage(null);
-							}
+							setErrorMessage(summarizeSkillSyncErrors(result.errors));
 							const disabled = new Set(
 								agents.filter((a) => !next.has(a.name)).map((a) => a.name),
 							);
@@ -430,11 +431,16 @@ export function App() {
 				</box>
 			</box>
 
+			{syncing && (
+				<box paddingLeft={2}>
+					<text fg={theme.overlay1}>Synchronizing skills in background...</text>
+				</box>
+			)}
 			{/* Error notification */}
-			{errorMessage && (
+			{(errorMessage || syncError) && (
 				<box paddingLeft={2} paddingRight={2}>
 					<text fg={theme.red} attributes={TextAttributes.BOLD}>
-						{errorMessage}
+						{errorMessage || syncError}
 					</text>
 				</box>
 			)}

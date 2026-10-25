@@ -1,6 +1,9 @@
 import {
   lstatSync,
   mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
   readdirSync,
   readlinkSync,
   realpathSync,
@@ -9,7 +12,7 @@ import {
   unlinkSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { AgentConfig, UniversalAgents } from "#lib/config";
 import { syncCopyAgents } from "#lib/copy-agent-skills";
 
@@ -45,6 +48,61 @@ function linkTarget(directory: string, link: string): string {
   return join(physicalPath(dirname(target)), basename(target));
 }
 
+// A legacy relative link can name the shared Skill Instance lexically but
+// resolve elsewhere after an agent directory is moved into dotfiles. Only a
+// missing relative target with that exact logical scope/name is repairable.
+function staleSharedRelativeLink(
+  path: string,
+  link: string,
+  directory: string,
+  target: string,
+): boolean {
+  if (isAbsolute(link) || resolve(directory, link) !== target) return false;
+  try {
+    statSync(path);
+    return false;
+  } catch (error) {
+    if (!isMissing(error)) throw error;
+    return true;
+  }
+}
+
+function repairSharedRelativeLink(
+  path: string,
+  link: string,
+  directory: string,
+  physicalDirectory: string,
+  shared: string,
+  physicalShared: string,
+  target: string,
+): boolean {
+  if (!staleSharedRelativeLink(path, link, directory, target)) return false;
+  const before = lstatSync(path);
+  const temporary = mkdtempSync(join(directory, ".skills-tui-link-"));
+  try {
+    const replacement = join(temporary, "link");
+    symlinkSync(target, replacement);
+    const current = lstatSync(path);
+    if (
+      !current.isSymbolicLink() ||
+      current.dev !== before.dev ||
+      current.ino !== before.ino ||
+      current.ctimeMs !== before.ctimeMs ||
+      readlinkSync(path) !== link ||
+      realpathSync(directory) !== physicalDirectory ||
+      physicalPath(shared) !== physicalShared ||
+      !staleSharedRelativeLink(path, link, directory, target)
+    )
+      throw new Error("Skill link changed during repair; left unchanged");
+    if (!statSync(join(target, "SKILL.md")).isFile())
+      throw new Error("Shared Skill Instance changed during repair");
+    renameSync(replacement, path);
+    return true;
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
 function agentDirectory(
   agent: AgentConfig,
   scope: "global" | "local",
@@ -66,7 +124,8 @@ export function syncAgentSkills(
   locations = { home: homedir(), project: process.cwd() },
   universalAgents: UniversalAgents = { both: new Set(), local: new Set() },
 ): AgentSkillSyncResult {
-  if (agent.mode === "copy") return syncCopyAgents(agents, selectedAgents, locations);
+  if (agent.mode === "copy")
+    return syncCopyAgents(agents, selectedAgents, locations);
   const result: AgentSkillSyncResult = { added: [], removed: [], errors: [] };
   const enabled = selectedAgents.has(agent.name);
 
@@ -76,7 +135,8 @@ export function syncAgentSkills(
     if (
       universalAgents.both.has(agent.name) ||
       (scope === "local" && universalAgents.local.has(agent.name))
-    ) continue;
+    )
+      continue;
     const base = scope === "global" ? locations.home : locations.project;
     const shared = resolve(base, ".agents/skills");
     const directory = agentDirectory(agent, scope, locations);
@@ -87,11 +147,17 @@ export function syncAgentSkills(
       // Shared locations cannot be disabled without deleting other agents'
       // skills. Nor can a location still used by another selected agent.
       if (physicalDirectory === physicalShared) continue;
-      if (!enabled && agents.some((other) =>
-        other.name !== agent.name &&
-        selectedAgents.has(other.name) &&
-        physicalPath(agentDirectory(other, scope, locations)) === physicalDirectory
-      )) continue;
+      if (
+        !enabled &&
+        agents.some(
+          (other) =>
+            other.name !== agent.name &&
+            selectedAgents.has(other.name) &&
+            physicalPath(agentDirectory(other, scope, locations)) ===
+              physicalDirectory,
+        )
+      )
+        continue;
 
       if (enabled) {
         let entries: string[];
@@ -109,11 +175,31 @@ export function syncAgentSkills(
             if (!statSync(join(target, "SKILL.md")).isFile()) continue;
             try {
               const existing = lstatSync(linkPath);
-              if (
-                existing.isSymbolicLink() &&
-                linkTarget(physicalDirectory, readlinkSync(linkPath)) === join(physicalShared, name)
-              ) continue;
-              throw new Error("Skill Location already contains an independent entry; left unchanged");
+              if (existing.isSymbolicLink()) {
+                const link = readlinkSync(linkPath);
+                if (
+                  linkTarget(physicalDirectory, link) ===
+                  join(physicalShared, name)
+                )
+                  continue;
+                if (
+                  repairSharedRelativeLink(
+                    linkPath,
+                    link,
+                    directory,
+                    physicalDirectory,
+                    shared,
+                    physicalShared,
+                    resolve(target),
+                  )
+                ) {
+                  result.added.push(linkPath);
+                  continue;
+                }
+              }
+              throw new Error(
+                "Skill Location contains an unrelated entry; left unchanged",
+              );
             } catch (error) {
               if (!isMissing(error)) throw error;
             }
@@ -121,7 +207,8 @@ export function syncAgentSkills(
             symlinkSync(resolve(target), linkPath);
             result.added.push(linkPath);
           } catch (error) {
-            if (!isMissing(error)) result.errors.push({ path: linkPath, error });
+            if (!isMissing(error))
+              result.errors.push({ path: linkPath, error });
           }
         }
       } else {
@@ -138,7 +225,17 @@ export function syncAgentSkills(
             const before = lstatSync(path);
             if (!before.isSymbolicLink()) continue;
             const link = readlinkSync(path);
-            if (linkTarget(physicalDirectory, link) !== join(physicalShared, name)) continue;
+            if (
+              linkTarget(physicalDirectory, link) !==
+                join(physicalShared, name) &&
+              !staleSharedRelativeLink(
+                path,
+                link,
+                directory,
+                join(shared, name),
+              )
+            )
+              continue;
             const current = lstatSync(path);
             if (
               !current.isSymbolicLink() ||
@@ -148,8 +245,16 @@ export function syncAgentSkills(
               readlinkSync(path) !== link ||
               realpathSync(directory) !== physicalDirectory ||
               physicalPath(shared) !== physicalShared ||
-              linkTarget(physicalDirectory, link) !== join(physicalShared, name)
-            ) continue;
+              (linkTarget(physicalDirectory, link) !==
+                join(physicalShared, name) &&
+                !staleSharedRelativeLink(
+                  path,
+                  link,
+                  directory,
+                  join(shared, name),
+                ))
+            )
+              continue;
             unlinkSync(path);
             result.removed.push(path);
           } catch (error) {

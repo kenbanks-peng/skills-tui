@@ -13,11 +13,25 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { summarizeSkillSyncErrors } from "./configured-skills";
 
 const roots: string[] = [];
 afterEach(() => {
 	for (const root of roots.splice(0))
 		rmSync(root, { recursive: true, force: true });
+});
+
+test("synchronization warnings summarize repeated conflicts without stack traces", () => {
+	const errors = Array.from({ length: 23 }, (_, index) => ({
+		path: `/agent/skills/conflict-${index}`,
+		error: new Error("Unrelated entry; left unchanged"),
+	}));
+	const message = summarizeSkillSyncErrors(errors);
+	expect(message).toBe(
+		"Could not sync /agent/skills/conflict-0: Unrelated entry; left unchanged (+22 more)",
+	);
+	expect(message).not.toContain("at ");
+	expect(summarizeSkillSyncErrors([])).toBeNull();
 });
 
 test("configured synchronization adopts, restores, and deselects local skills with agent links and portable copies", () => {
@@ -208,6 +222,7 @@ printf 'new content' > "$scope/.agents/skills/$name/SKILL.md"
 	);
 	expect(synchronize().errors).toEqual([]);
 	expect(existsSync(join(shared, "aven"))).toBe(false);
+	expect(readFileSync(calls, "utf8")).not.toContain("--skill");
 	rmSync(shared, { recursive: true });
 	expect(synchronize().errors).toEqual([]);
 	expect(readFileSync(join(shared, "chosen", "SKILL.md"), "utf8")).toBe(

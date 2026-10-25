@@ -12,14 +12,20 @@ On first use, adopt existing installed skills from successfully checked configur
 repositories. Do not install every skill in those repositories. Report ambiguous
 repository matches rather than choose a source without evidence.
 
-Reconcile the shared Skill Locations against these selections at startup, after
-selection changes, and periodically while open. Restore missing selected skills.
+Reconcile the shared Skill Locations against these selections in the background
+after the interface mounts, after selection changes, and periodically while open.
+Restore missing selected skills.
 Remove deselected skills, skills from removed repositories, and skills confirmed
 absent upstream. Repository failures must not cause deletion.
 
 The skills CLI remains an adapter for remote discovery and explicit named
-installation. Startup and manual updates reinstall selected skills; they do not
-delegate selection decisions to the CLI's update command.
+installation. Manual updates reinstall selected skills; routine startup and
+periodic checks preserve intact selected folders. Do not delegate selection
+decisions to the CLI's update command.
+
+This corrects the initial startup policy, which blocked the interface while
+reinstalling every selected skill. Network checks must not delay opening the
+interface, and routine checks must not perform those redundant installations.
 
 ## Consequences
 

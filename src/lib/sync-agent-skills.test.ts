@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync,
-  rmSync, symlinkSync, writeFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -20,12 +26,16 @@ describe("agent toggle synchronization", () => {
     mkdirSync(locations.home);
     mkdirSync(locations.project);
     claude = {
-      name: "claude-code", display: "Claude Code",
-      global: "~/.claude/skills/", local: ".claude/skills/",
+      name: "claude-code",
+      display: "Claude Code",
+      global: "~/.claude/skills/",
+      local: ".claude/skills/",
     };
     pi = {
-      name: "pi", display: "Pi",
-      global: "~/.pi/agent/skills/", local: ".pi/skills/",
+      name: "pi",
+      display: "Pi",
+      global: "~/.pi/agent/skills/",
+      local: ".pi/skills/",
     };
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -41,7 +51,13 @@ describe("agent toggle synchronization", () => {
     agents = [claude, pi],
     universal: UniversalAgents = { both: new Set(), local: new Set() },
   ) {
-    return syncAgentSkills(agent, agents, new Set(selected), locations, universal);
+    return syncAgentSkills(
+      agent,
+      agents,
+      new Set(selected),
+      locations,
+      universal,
+    );
   }
 
   test("OpenCode skips both scopes even with an independent agent path", () => {
@@ -53,12 +69,19 @@ describe("agent toggle synchronization", () => {
     writeFileSync(join(directory, "example"), "independent content");
     const universal = { both: new Set(["opencode"]), local: new Set<string>() };
     expect(run(["opencode"], opencode, [opencode], universal)).toEqual({
-      added: [], removed: [], errors: [],
+      added: [],
+      removed: [],
+      errors: [],
     });
     rmSync(join(directory, "example"));
-    symlinkSync(join(locations.home, ".agents/skills/example"), join(directory, "example"));
+    symlinkSync(
+      join(locations.home, ".agents/skills/example"),
+      join(directory, "example"),
+    );
     expect(run([], opencode, [opencode], universal)).toEqual({
-      added: [], removed: [], errors: [],
+      added: [],
+      removed: [],
+      errors: [],
     });
     expect(lstatSync(join(directory, "example")).isSymbolicLink()).toBe(true);
   });
@@ -66,10 +89,15 @@ describe("agent toggle synchronization", () => {
   test("agents with shared Project Scope skip only that scope", () => {
     install(locations.home);
     install(locations.project);
-    const universal = { both: new Set<string>(), local: new Set(["claude-code"]) };
+    const universal = {
+      both: new Set<string>(),
+      local: new Set(["claude-code"]),
+    };
     const result = run(["claude-code"], claude, [claude], universal);
     expect(result.errors).toEqual([]);
-    expect(result.added).toEqual([join(locations.home, ".claude/skills/example")]);
+    expect(result.added).toEqual([
+      join(locations.home, ".claude/skills/example"),
+    ]);
     expect(existsSync(join(locations.project, ".claude"))).toBe(false);
     expect(run([], claude, [claude], universal).removed).toHaveLength(1);
   });
@@ -80,8 +108,12 @@ describe("agent toggle synchronization", () => {
     const result = run(["claude-code", "pi"]);
     expect(result.errors).toEqual([]);
     expect(result.added).toHaveLength(2);
-    expect(readlinkSync(join(locations.home, ".claude/skills/example"))).toBe(global);
-    expect(readlinkSync(join(locations.project, ".claude/skills/example"))).toBe(local);
+    expect(readlinkSync(join(locations.home, ".claude/skills/example"))).toBe(
+      global,
+    );
+    expect(
+      readlinkSync(join(locations.project, ".claude/skills/example")),
+    ).toBe(local);
     expect(run(["claude-code", "pi"]).added).toEqual([]);
   });
 
@@ -93,9 +125,15 @@ describe("agent toggle synchronization", () => {
     const result = run(["pi"]);
     expect(result.errors).toEqual([]);
     expect(result.removed).toHaveLength(2);
-    expect(existsSync(join(locations.home, ".pi/agent/skills/example/SKILL.md"))).toBe(true);
-    expect(existsSync(join(locations.project, ".agents/skills/example/SKILL.md"))).toBe(true);
-    expect(existsSync(join(locations.home, ".claude/skills/example"))).toBe(false);
+    expect(
+      existsSync(join(locations.home, ".pi/agent/skills/example/SKILL.md")),
+    ).toBe(true);
+    expect(
+      existsSync(join(locations.project, ".agents/skills/example/SKILL.md")),
+    ).toBe(true);
+    expect(existsSync(join(locations.home, ".claude/skills/example"))).toBe(
+      false,
+    );
     expect(run(["pi"]).removed).toEqual([]);
   });
 
@@ -113,14 +151,20 @@ describe("agent toggle synchronization", () => {
 
   test("missing scopes and non-skill folders do not cause errors", () => {
     expect(run(["claude-code"]).errors).toEqual([]);
-    mkdirSync(join(locations.home, ".agents/skills/not-a-skill"), { recursive: true });
+    mkdirSync(join(locations.home, ".agents/skills/not-a-skill"), {
+      recursive: true,
+    });
     expect(run(["claude-code"]).added).toEqual([]);
     expect(run([]).errors).toEqual([]);
   });
 
   test("shared-path agents never remove the shared Skill Instances", () => {
     const skill = install(locations.home);
-    const shared = { ...claude, global: "~/.agents/skills/", local: ".agents/skills/" };
+    const shared = {
+      ...claude,
+      global: "~/.agents/skills/",
+      local: ".agents/skills/",
+    };
     expect(run(["claude-code"], shared).added).toEqual([]);
     expect(run([], shared).removed).toEqual([]);
     expect(existsSync(skill)).toBe(true);
@@ -131,7 +175,9 @@ describe("agent toggle synchronization", () => {
     run(["claude-code"]);
     const other = { ...claude, name: "other" };
     expect(run(["other"], claude, [claude, other]).removed).toEqual([]);
-    expect(existsSync(join(locations.home, ".claude/skills/example"))).toBe(true);
+    expect(existsSync(join(locations.home, ".claude/skills/example"))).toBe(
+      true,
+    );
   });
 
   test("handles relative links and agent directories aliased into dotfiles", () => {
@@ -147,10 +193,102 @@ describe("agent toggle synchronization", () => {
     expect(existsSync(skill)).toBe(true);
   });
 
+  test("repairs a broken shared-relative link when agent and shared folders are aliased into dotfiles", () => {
+    const dotfiles = join(root, "dotfiles");
+    const shared = join(dotfiles, "agents/skills/example");
+    const directory = join(dotfiles, "claude/skills");
+    mkdirSync(shared, { recursive: true });
+    writeFileSync(join(shared, "SKILL.md"), "# Example");
+    mkdirSync(directory, { recursive: true });
+    symlinkSync(join(dotfiles, "agents"), join(locations.home, ".agents"));
+    symlinkSync(join(dotfiles, "claude"), join(locations.home, ".claude"));
+    const link = join(directory, "example");
+    symlinkSync("../../.agents/skills/example", link);
+    expect(existsSync(link)).toBe(false);
+
+    const result = run(["claude-code"]);
+    expect(result.errors).toEqual([]);
+    expect(result.added).toEqual([
+      join(locations.home, ".claude/skills/example"),
+    ]);
+    expect(readlinkSync(link)).toBe(
+      join(locations.home, ".agents/skills/example"),
+    );
+    expect(existsSync(join(link, "SKILL.md"))).toBe(true);
+    expect(run(["claude-code"]).added).toEqual([]);
+  });
+
+  test("does not replace a live relative link that resolves outside the shared location", () => {
+    install(locations.home);
+    const directory = join(root, "dotfiles/claude/skills");
+    const other = join(root, "dotfiles/.agents/skills/example");
+    mkdirSync(directory, { recursive: true });
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(other, "SKILL.md"), "# Independent");
+    symlinkSync(join(root, "dotfiles/claude"), join(locations.home, ".claude"));
+    const link = join(directory, "example");
+    symlinkSync("../../.agents/skills/example", link);
+
+    const result = run(["claude-code"]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.added).toEqual([]);
+    expect(readlinkSync(link)).toBe("../../.agents/skills/example");
+    expect(existsSync(join(other, "SKILL.md"))).toBe(true);
+  });
+
+  test("does not replace unrelated dead links even when their names match shared skills", () => {
+    install(locations.home);
+    const directory = join(root, "dotfiles/claude/skills");
+    mkdirSync(directory, { recursive: true });
+    symlinkSync(join(root, "dotfiles/claude"), join(locations.home, ".claude"));
+    const link = join(directory, "example");
+    symlinkSync("../../independent/example", link);
+
+    const result = run(["claude-code"]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.added).toEqual([]);
+    expect(readlinkSync(link)).toBe("../../independent/example");
+  });
+
+  test("repairs the same aliased relative-link pattern in Project Scope", () => {
+    const shared = install(locations.project);
+    const directory = join(root, "dotfiles/project-claude/skills");
+    mkdirSync(directory, { recursive: true });
+    symlinkSync(
+      join(root, "dotfiles/project-claude"),
+      join(locations.project, ".claude"),
+    );
+    const link = join(directory, "example");
+    symlinkSync("../../.agents/skills/example", link);
+    expect(existsSync(link)).toBe(false);
+    expect(run(["claude-code"]).errors).toEqual([]);
+    expect(readlinkSync(link)).toBe(shared);
+    expect(existsSync(join(link, "SKILL.md"))).toBe(true);
+  });
+
+  test("disabling removes a confirmed stale shared-relative link through an aliased directory", () => {
+    install(locations.home);
+    const directory = join(root, "dotfiles/claude/skills");
+    mkdirSync(directory, { recursive: true });
+    symlinkSync(join(root, "dotfiles/claude"), join(locations.home, ".claude"));
+    const link = join(directory, "example");
+    symlinkSync("../../.agents/skills/example", link);
+    expect(run([]).removed).toEqual([
+      join(locations.home, ".claude/skills/example"),
+    ]);
+    expect(() => lstatSync(link)).toThrow();
+    expect(
+      existsSync(join(locations.home, ".agents/skills/example/SKILL.md")),
+    ).toBe(true);
+  });
+
   test("disable cleans managed dead links without deleting unrelated dead links", () => {
     const directory = join(locations.home, ".claude/skills");
     mkdirSync(directory, { recursive: true });
-    symlinkSync(resolve(locations.home, ".agents/skills/gone"), join(directory, "gone"));
+    symlinkSync(
+      resolve(locations.home, ".agents/skills/gone"),
+      join(directory, "gone"),
+    );
     symlinkSync(join(root, "elsewhere"), join(directory, "unrelated"));
     expect(run([]).removed).toEqual([join(directory, "gone")]);
     expect(lstatSync(join(directory, "unrelated")).isSymbolicLink()).toBe(true);
@@ -183,7 +321,9 @@ describe("agent toggle synchronization", () => {
     writeFileSync(join(locations.home, ".claude"), "not a directory");
     const result = run(["claude-code"]);
     expect(result.errors).toHaveLength(1);
-    expect(result.added).toEqual([join(locations.project, ".claude/skills/example")]);
+    expect(result.added).toEqual([
+      join(locations.project, ".claude/skills/example"),
+    ]);
   });
 
   test("enable after disable restores visibility without touching content", () => {
