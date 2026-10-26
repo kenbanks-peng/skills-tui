@@ -5,3 +5,5 @@ skills-cache.json
 .vscode/
 .DS_Store
 Thumbs.db
+
+/bin/

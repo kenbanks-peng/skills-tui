@@ -21,7 +21,7 @@ skills-tui
 ```
 
 Run from the project directory to manage its Project Scope. For development,
-use `cargo run` or `./bin/skills-tui`. No JavaScript runtime is required.
+use `cargo run`. No JavaScript runtime is required.
 
 Use `skills-tui --sync` to synchronize without opening the interface.
 Use `cargo test` to run isolated tests.
