@@ -1,8 +1,20 @@
-[tools]
-rust = "stable"
+[tasks.build]
+run = "cargo build --release --locked"
 
 [tasks.install]
-run = "cargo build --release --locked"
+depends = ["build"]
+
+[tasks.deploy]
+depends = ["build"]
+run = '''
+set -eu
+mkdir -p ./bin
+tmp=$(mktemp ./bin/.skills-tui.XXXXXX)
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+cp ./target/release/skills-tui "$tmp"
+chmod 755 "$tmp"
+mv -f "$tmp" ./bin/skills-tui
+'''
 
 [tasks.test]
 run = "cargo test --locked"
