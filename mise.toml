@@ -1,8 +1,5 @@
 [tasks.build]
-run = "cargo build --release --locked"
-
-[tasks.install]
-depends = ["build"]
+run = "cargo build --release"
 
 [tasks.deploy]
 depends = ["build"]
@@ -17,7 +14,7 @@ mv -f "$tmp" ./bin/skills-tui
 '''
 
 [tasks.test]
-run = "cargo test --locked"
+run = "cargo test"
 
 [tasks.check]
-run = "cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings"
+run = "cargo fmt --check && cargo clippy --all-targets -- -D warnings"

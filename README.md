@@ -16,7 +16,7 @@ Install [Rust](https://rustup.rs/) and Git, then run:
 ```sh
 git clone https://github.com/kenbanks-peng/skills-tui
 cd skills-tui
-cargo install --path . --locked
+cargo install --path .
 skills-tui
 ```
 
@@ -24,7 +24,7 @@ Run from the project directory to manage its Project Scope. For development,
 use `cargo run` or `./bin/skills-tui`. No JavaScript runtime is required.
 
 Use `skills-tui --sync` to synchronize without opening the interface.
-Use `cargo test --locked` to run isolated tests.
+Use `cargo test` to run isolated tests.
 
 ## Find
 
