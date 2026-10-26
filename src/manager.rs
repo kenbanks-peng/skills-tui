@@ -12,6 +12,8 @@ use std::{collections::BTreeSet, fs};
 #[derive(Clone, Debug)]
 pub enum Action {
     Synchronize,
+    /// Fetch current repositories, update changed selections in both scopes, and reconcile visibility.
+    Refresh,
     Update(Scope),
     Toggle {
         repo: String,
@@ -73,7 +75,7 @@ impl Manager {
         // Validate all saved intent before making any filesystem change.
         let mut selections = Selections::load(&self.locations)?;
         let mut disabled = state::load_disabled(&self.locations)?;
-        let force = matches!(action, Action::Update(_));
+        let force = matches!(action, Action::Update(_) | Action::Refresh);
         let inventory = repository::inventory(
             &self.locations,
             &config.repos,
@@ -250,11 +252,19 @@ impl Manager {
                     continue;
                 };
                 let destination = shared.join(&selection.name);
-                let refresh = matches!(action, Action::Update(s) if s == scope);
-                if refresh || !destination.join("SKILL.md").is_file() {
-                    match files::replace_tree(&skill.path, &destination, None) {
-                        Ok(()) => changed += 1,
+                if matches!(action, Action::Refresh) {
+                    match files::refresh_tree(&skill.path, &destination) {
+                        Ok(true) => changed += 1,
+                        Ok(false) => {}
                         Err(e) => errors.push(format!("{}: {e:#}", destination.display())),
+                    }
+                } else {
+                    let refresh = matches!(action, Action::Update(s) if s == scope);
+                    if refresh || !destination.join("SKILL.md").is_file() {
+                        match files::replace_tree(&skill.path, &destination, None) {
+                            Ok(()) => changed += 1,
+                            Err(e) => errors.push(format!("{}: {e:#}", destination.display())),
+                        }
                     }
                 }
             }

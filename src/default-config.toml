@@ -16,7 +16,7 @@ repos = [
   "sickn33/antigravity-awesome-skills",
 ]
 
-# Cache expiry in hours. Updates always fetches current content.
+# Cache expiry in hours. Startup and manual refresh always fetch current content.
 cache_expiry_hours = 24
 
 [agents]

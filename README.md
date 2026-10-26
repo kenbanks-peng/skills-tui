@@ -41,7 +41,8 @@ control deployment. No Node.js, Bun, or external skills CLI is needed.
 The first run creates `~/.config/skills-tui/config.toml`. Configure repository
 identifiers (`owner/repo`), Git URLs, or local `file:///` URLs.
 Remote repositories use cached Git checkouts; local repositories are read directly.
-The default cache expiry is 24 hours. Updates fetch the latest remote content.
+The default cache expiry is 24 hours. Startup and manual refresh fetch the latest
+remote content regardless of cache age.
 
 ```toml
 repos = ["anthropics/skills", "file:///path/to/skills"]
@@ -64,7 +65,11 @@ mode = "copy" # Default: "symlink"
 
 Skill Selections are stored in
 `~/.local/state/skills-tui/skill-selections.toml`, separate from config.
-Synchronization runs at startup, after changes, and every 30 seconds.
+When the TUI opens, one background operation fetches repositories, updates changed
+selected Skills in User Scope and the current Project Scope, and synchronizes
+Agent Visibility. Failed repository checks preserve installed content. There are
+no periodic checks. Explicit installation and setting changes still synchronize
+their results; press `r` for another combined update and synchronization.
 The shared `~/.agents/skills` and `<project>/.agents/skills` locations are managed:
 unselected Skill Instances are removed after adoption. Do not store independent
 skills there.
@@ -82,8 +87,8 @@ See [selection and synchronization](docs/skill-link-reconciliation.md).
 | Enter, Space | Select or toggle in repository and settings panels |
 | g | Change Install Scope |
 | / | Focus the filter, or the Find query from results |
-| Page Up, Page Down | Scroll the preview or update output |
-| r | Synchronize; apply latest versions in Updates |
+| Page Up, Page Down | Scroll the preview or move through Find results |
+| r | Fetch updates and synchronize both scopes outside text fields |
 | Esc | Clear the filter, then quit |
 | q, Ctrl+C | Quit outside text fields; Ctrl+C always quits |
 

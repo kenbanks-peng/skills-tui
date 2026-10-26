@@ -140,8 +140,57 @@ pub fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     }
     copy(source, destination, &mut BTreeSet::new())
 }
+/// Compare materialized content without following links in the installed tree.
+fn same_tree(source: &Path, destination: &Path) -> Result<bool> {
+    let left = fs::symlink_metadata(source)?;
+    let right = fs::symlink_metadata(destination)?;
+    if left.file_type() != right.file_type() {
+        return Ok(false);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if left.permissions().mode() & 0o7777 != right.permissions().mode() & 0o7777 {
+            return Ok(false);
+        }
+    }
+    #[cfg(not(unix))]
+    if left.permissions().readonly() != right.permissions().readonly() {
+        return Ok(false);
+    }
+    if left.is_file() {
+        return Ok(left.len() == right.len() && fs::read(source)? == fs::read(destination)?);
+    }
+    if !left.is_dir() {
+        return Ok(false);
+    }
+    let children = entries(source)?;
+    let installed = entries(destination)?;
+    if children.len() != installed.len() {
+        return Ok(false);
+    }
+    for (left, right) in children.iter().zip(&installed) {
+        if left.file_name() != right.file_name() || !same_tree(left, right)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+/// Check content and replace only changed Skill Instances. Build first to validate
+/// source links and cycles before touching any installed content.
+pub fn refresh_tree(source: &Path, destination: &Path) -> Result<bool> {
+    replace_tree_if_changed(source, destination, None, true)
+}
 /// Build before moving the old entry. Keep its backup if rollback fails.
 pub fn replace_tree(source: &Path, destination: &Path, marker: Option<&[u8]>) -> Result<()> {
+    replace_tree_if_changed(source, destination, marker, false).map(|_| ())
+}
+fn replace_tree_if_changed(
+    source: &Path,
+    destination: &Path,
+    marker: Option<&[u8]>,
+    check_content: bool,
+) -> Result<bool> {
     let parent = destination.parent().context("Missing destination parent")?;
     ensure!(
         !physical(parent)?.starts_with(source.canonicalize()?),
@@ -163,6 +212,9 @@ pub fn replace_tree(source: &Path, destination: &Path, marker: Option<&[u8]>) ->
         fs::write(path, content)?;
     }
     let previous = exists(destination)?;
+    if previous && check_content && same_tree(&new, destination)? {
+        return Ok(false);
+    }
     if previous {
         fs::rename(destination, &old)?;
     }
@@ -176,7 +228,7 @@ pub fn replace_tree(source: &Path, destination: &Path, marker: Option<&[u8]>) ->
         }
         return Err(error.into());
     }
-    Ok(())
+    Ok(true)
 }
 #[cfg(unix)]
 pub fn symlink(target: &Path, path: &Path) -> Result<()> {

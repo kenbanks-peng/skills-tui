@@ -1,9 +1,0 @@
-[env]
-
-[tools]
-bun = "latest"
-pnpm = "latest"
-
-[tasks.install]
-run = "pnpm install"
-

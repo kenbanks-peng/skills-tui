@@ -540,3 +540,87 @@ fn catalog_install_does_not_replace_a_skill_selected_from_another_repository() {
         f.url()
     );
 }
+
+#[test]
+fn refresh_combines_update_and_synchronization_for_both_scopes() {
+    let f = Fixture::new();
+    f.skill("alpha");
+    f.skill("beta");
+    for scope in [Scope::User, Scope::Project] {
+        f.select(scope, &["alpha"]);
+    }
+    let mut manager = f.manager();
+    manager.run(Action::Synchronize).unwrap();
+    fs::write(f.repo.join("alpha/SKILL.md"), "# Updated at startup").unwrap();
+    fs::write(f.repo.join("alpha/extra.txt"), "new content").unwrap();
+    let result = manager.run(Action::Refresh).unwrap();
+    assert!(result.errors.is_empty(), "{:?}", result.errors);
+    assert_eq!(result.changed, 2);
+    for scope in [Scope::User, Scope::Project] {
+        assert_eq!(
+            fs::read_to_string(f.shared(scope, "alpha").join("SKILL.md")).unwrap(),
+            "# Updated at startup"
+        );
+        assert_eq!(
+            fs::read_to_string(f.shared(scope, "alpha").join("extra.txt")).unwrap(),
+            "new content"
+        );
+        assert!(!f.shared(scope, "beta").exists());
+    }
+    let installed = f.shared(Scope::User, "alpha").join("SKILL.md");
+    let modified = fs::metadata(&installed).unwrap().modified().unwrap();
+    assert_eq!(manager.run(Action::Refresh).unwrap().changed, 0);
+    assert_eq!(
+        fs::metadata(installed).unwrap().modified().unwrap(),
+        modified
+    );
+    // Supporting-file changes must update even when SKILL.md is unchanged.
+    fs::write(f.repo.join("alpha/extra.txt"), "changed asset").unwrap();
+    assert_eq!(manager.run(Action::Refresh).unwrap().changed, 2);
+    assert_eq!(
+        fs::read_to_string(f.shared(Scope::User, "alpha").join("extra.txt")).unwrap(),
+        "changed asset"
+    );
+}
+
+#[test]
+fn refresh_preserves_installed_content_when_repository_check_fails() {
+    let f = Fixture::new();
+    f.skill("alpha");
+    f.select(Scope::User, &["alpha"]);
+    let mut manager = f.manager();
+    manager.run(Action::Synchronize).unwrap();
+    let original = fs::read(f.shared(Scope::User, "alpha").join("SKILL.md")).unwrap();
+    fs::rename(&f.repo, f.repo.with_extension("unavailable")).unwrap();
+    let result = manager.run(Action::Refresh).unwrap();
+    assert!(!result.errors.is_empty());
+    assert_eq!(
+        fs::read(f.shared(Scope::User, "alpha").join("SKILL.md")).unwrap(),
+        original
+    );
+    assert_eq!(
+        result
+            .selections
+            .get(Scope::User, &f.locations.project)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn refresh_rejects_cyclic_content_without_replacing_the_installed_skill() {
+    let f = Fixture::new();
+    f.skill("alpha");
+    f.select(Scope::User, &["alpha"]);
+    let mut manager = f.manager();
+    manager.run(Action::Synchronize).unwrap();
+    let installed = f.shared(Scope::User, "alpha");
+    let original = fs::read(installed.join("SKILL.md")).unwrap();
+    std::os::unix::fs::symlink(f.repo.join("alpha"), f.repo.join("alpha/cycle")).unwrap();
+    let result = manager.run(Action::Refresh).unwrap();
+    assert!(result.errors.iter().any(|error| error.contains("cycle")));
+    assert_eq!(fs::read(installed.join("SKILL.md")).unwrap(), original);
+    assert!(!installed.join("cycle").exists());
+}

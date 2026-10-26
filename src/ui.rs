@@ -11,7 +11,7 @@ use anyhow::{Result, ensure};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Layout, Rect},
+    layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
     widgets::{
@@ -21,7 +21,7 @@ use ratatui::{
 };
 use std::{fs, io::IsTerminal, sync::mpsc, thread, time::Duration};
 
-const SERVICES: [&str; 4] = ["View by repo", "View by skill", "Find", "Updates"];
+const SERVICES: [&str; 3] = ["View by repo", "View by skill", "Find"];
 const ACCENT: Color = Color::Rgb(203, 166, 247);
 const TEXT: Color = Color::Rgb(205, 214, 244);
 const MUTED: Color = Color::Rgb(127, 132, 156);
@@ -60,8 +60,8 @@ pub struct App {
     filter: String,
     preview_scroll: u16,
     busy: bool,
+    refreshing: bool,
     status: String,
-    output_scroll: u16,
     find: find::Find,
     installing: Option<(String, Scope)>,
 }
@@ -87,8 +87,8 @@ impl App {
             filter: String::new(),
             preview_scroll: 0,
             busy: true,
+            refreshing: true,
             status: "Synchronizing skills in background...".into(),
-            output_scroll: 0,
             find: find::Find::default(),
             installing: None,
         })
@@ -196,7 +196,9 @@ impl App {
             Action::Install { name, scope, .. } => Some((name.clone(), *scope)),
             _ => None,
         };
+        let refreshing = matches!(action, Action::Refresh);
         if sender.send(action).is_ok() {
+            self.refreshing = refreshing;
             self.installing = installing;
             self.busy = true;
             self.status = "Synchronizing skills in background...".into();
@@ -277,6 +279,7 @@ impl App {
                 }
                 KeyCode::Char('/') => self.focus = Focus::Query,
                 KeyCode::Char('g') => self.scope = self.scope.toggle(),
+                KeyCode::Char('r') => self.send(sender, Action::Refresh),
                 KeyCode::Char('q') => return true,
                 _ => {}
             }
@@ -312,29 +315,17 @@ impl App {
             KeyCode::Char('/') if self.service < 2 => {
                 self.focus = Focus::Search;
             }
-            KeyCode::Char('r') => {
-                let action = if self.service == 3 {
-                    Action::Update(self.scope)
-                } else {
-                    Action::Synchronize
-                };
-                self.send(sender, action);
-            }
+            KeyCode::Char('r') => self.send(sender, Action::Refresh),
             KeyCode::PageDown => {
                 self.preview_scroll = self.preview_scroll.saturating_add(10);
-                self.output_scroll = self.output_scroll.saturating_add(10);
             }
             KeyCode::PageUp => {
                 self.preview_scroll = self.preview_scroll.saturating_sub(10);
-                self.output_scroll = self.output_scroll.saturating_sub(10);
             }
             KeyCode::Up | KeyCode::Char('k') => self.move_index(false),
             KeyCode::Down | KeyCode::Char('j') => self.move_index(true),
             KeyCode::Enter | KeyCode::Char(' ') => match self.focus {
                 Focus::Services => {
-                    if self.service == 3 {
-                        self.send(sender, Action::Update(self.scope));
-                    }
                     self.focus = if self.service == 0 {
                         Focus::Repos
                     } else if self.service == 2 {
@@ -346,7 +337,6 @@ impl App {
                 Focus::Repos => {
                     self.focus = Focus::Skills;
                 }
-                Focus::Skills if self.service == 3 => self.send(sender, Action::Update(self.scope)),
                 Focus::Skills if self.service == 1 => {}
                 Focus::Skills => {
                     if let Some(row) = self.rows().get(self.skill_index).cloned() {
@@ -437,41 +427,7 @@ impl App {
             self.focus == Focus::Services,
         );
         self.draw_settings(frame, side[2]);
-        if self.service == 3 {
-            let mut lines = vec![
-                format!("{} Skill Instances changed.", self.snapshot.changed),
-                String::new(),
-            ];
-            if self.snapshot.errors.is_empty() {
-                lines.push("Selected skills are synchronized.".into());
-            } else {
-                lines.extend(self.snapshot.errors.clone());
-            }
-            lines.push(String::new());
-            lines.push("New discoverable skills (not selected):".into());
-            for (repo, skills) in &self.snapshot.inventory.repos {
-                for skill in skills {
-                    let selected = self
-                        .snapshot
-                        .selections
-                        .get(self.scope, &self.locations.project)
-                        .is_some_and(|s| s.iter().any(|s| s.repo == *repo && s.name == skill.name));
-                    if !selected {
-                        lines.push(format!("{repo}: {}", skill.name));
-                    }
-                }
-            }
-            frame.render_widget(
-                Paragraph::new(lines.join("\n"))
-                    .wrap(Wrap { trim: false })
-                    .scroll((self.output_scroll, 0))
-                    .block(panel(
-                        "Updates — Enter or r: apply latest versions",
-                        self.focus == Focus::Skills,
-                    )),
-                columns[1],
-            );
-        } else if self.service == 1 {
+        if self.service == 1 {
             self.draw_installed(frame, columns[1]);
         } else if self.service == 2 {
             self.find.draw(
@@ -524,9 +480,11 @@ impl App {
             .as_ref()
             .map(|(name, scope)| format!("Installing {name} in {}…", scope.label()));
         let message = if self.busy {
-            installing_message
-                .as_deref()
-                .unwrap_or("Synchronizing skills in background...")
+            installing_message.as_deref().unwrap_or(if self.refreshing {
+                "Synchronizing and checking for updates..."
+            } else {
+                "Synchronizing skills in background..."
+            })
         } else if self.status.starts_with("Synchronized.") {
             ""
         } else {
@@ -646,8 +604,18 @@ impl App {
             .filter(|agent| !self.snapshot.disabled.contains(&agent.name))
             .collect::<Vec<_>>();
         let mut header = vec![Cell::from("Skill")];
-        header.extend(agents.iter().map(|agent| Cell::from(agent.display.clone())));
-        let mut widths = vec![Constraint::Min(16)];
+        header.extend(agents.iter().map(|agent| {
+            Cell::from(Line::from(agent.display.clone()).alignment(Alignment::Center))
+        }));
+        let name_width = rows
+            .iter()
+            .map(|row| row.name.chars().count())
+            .max()
+            .unwrap_or(0)
+            .max(12);
+        let mut widths = vec![Constraint::Length(
+            name_width.saturating_add(2).min(u16::MAX as usize) as u16,
+        )];
         widths.extend(agents.iter().map(|agent| {
             Constraint::Length(
                 (agent.display.chars().count().max(6) + 2).min(u16::MAX as usize) as u16,
@@ -665,8 +633,14 @@ impl App {
                         self.scope,
                         &row.name,
                     );
-                    Cell::from(if visible { "✓" } else { "·" })
-                        .style(Style::default().fg(if visible { GREEN } else { MUTED }))
+                    Cell::from(
+                        Line::from(if visible { "✓" } else { "·" }).alignment(Alignment::Center),
+                    )
+                    .style(Style::default().fg(if visible {
+                        GREEN
+                    } else {
+                        MUTED
+                    }))
                 }));
                 TableRow::new(cells)
             })
@@ -674,6 +648,7 @@ impl App {
         let mut state = TableState::default().with_selected(Some(self.skill_index));
         frame.render_stateful_widget(
             Table::new(items, widths)
+                .flex(Flex::Start)
                 .header(
                     TableRow::new(header)
                         .style(Style::default().fg(LAVENDER).bold())
@@ -1011,6 +986,27 @@ fn draw_footer(frame: &mut Frame, area: Rect, service: usize, focus: Focus) {
         help,
     );
 }
+// The first refresh runs only after terminal initialization. Afterward the
+// worker sleeps until an explicit User action; there is no periodic timer.
+fn background_worker(
+    mut manager: Manager,
+    actions: mpsc::Receiver<Action>,
+    results: mpsc::Sender<Option<Result<Snapshot>>>,
+) {
+    let mut next = Action::Refresh;
+    loop {
+        if results.send(None).is_err() {
+            break;
+        }
+        if results.send(Some(manager.run(next))).is_err() {
+            break;
+        }
+        next = match actions.recv() {
+            Ok(action) => action,
+            Err(_) => break,
+        };
+    }
+}
 pub fn run(manager: Manager) -> Result<()> {
     ensure!(
         std::io::stdin().is_terminal() && std::io::stdout().is_terminal(),
@@ -1021,23 +1017,7 @@ pub fn run(manager: Manager) -> Result<()> {
     let (results_tx, results_rx) = mpsc::channel::<Option<Result<Snapshot>>>();
     // The terminal is initialized before repository discovery starts.
     let mut terminal = ratatui::try_init()?;
-    thread::spawn(move || {
-        let mut manager = manager;
-        let mut next = Action::Synchronize;
-        loop {
-            if results_tx.send(None).is_err() {
-                break;
-            }
-            if results_tx.send(Some(manager.run(next))).is_err() {
-                break;
-            }
-            next = match actions_rx.recv_timeout(Duration::from_secs(30)) {
-                Ok(action) => action,
-                Err(mpsc::RecvTimeoutError::Timeout) => Action::Synchronize,
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            };
-        }
-    });
+    thread::spawn(move || background_worker(manager, actions_rx, results_tx));
     let result = (|| -> Result<()> {
         loop {
             while let Ok(result) = results_rx.try_recv() {
@@ -1051,6 +1031,15 @@ pub fn run(manager: Manager) -> Result<()> {
                         app.status = if snapshot.errors.is_empty() {
                             if let Some((name, scope)) = app.installing.take() {
                                 format!("Installed {name} in {}.", scope.label())
+                            } else if app.refreshing {
+                                if snapshot.changed == 0 {
+                                    "Skills are up to date.".into()
+                                } else {
+                                    format!(
+                                        "Updated and synchronized. {} Skill Instances changed.",
+                                        snapshot.changed
+                                    )
+                                }
                             } else {
                                 format!(
                                     "Synchronized. {} Skill Instances changed.",
@@ -1073,6 +1062,7 @@ pub fn run(manager: Manager) -> Result<()> {
                         app.status = format!("{error:#}");
                     }
                 }
+                app.refreshing = false;
             }
             app.find.poll();
             terminal.draw(|f| app.draw(f))?;
@@ -1116,7 +1106,7 @@ mod tests {
     #[test]
     fn panels_render_at_minimum_size() {
         let (_temp, mut app) = app();
-        for service in 0..4 {
+        for service in 0..SERVICES.len() {
             app.service = service;
             let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
             terminal.draw(|f| app.draw(f)).unwrap();
@@ -1151,6 +1141,7 @@ mod tests {
             assert!(text.contains(label), "missing {label}");
         }
         assert!(!text.contains("Synchronized."));
+        assert!(!text.contains("Updates"));
         assert_eq!(buffer[(0, 0)].symbol(), "╔");
         assert_eq!(buffer[(29, 0)].symbol(), "╭");
     }
@@ -1220,9 +1211,9 @@ mod tests {
     }
 
     #[test]
-    fn updates_keeps_filter_visible_but_disabled() {
+    fn find_keeps_filter_visible_but_disabled() {
         let (_temp, mut app) = app();
-        app.service = 3;
+        app.service = 2;
         app.busy = false;
         let mut terminal = Terminal::new(TestBackend::new(206, 46)).unwrap();
         terminal.draw(|f| app.draw(f)).unwrap();
@@ -1306,6 +1297,13 @@ mod tests {
         assert!(text.contains("Installed"));
         assert!(text.contains("Skill"));
         assert!(text.contains("Claude Code"));
+        let header = (29..206)
+            .map(|x| buffer[(x, 2)].symbol())
+            .collect::<String>();
+        assert!(
+            header.find("Claude Code").unwrap() - header.find("Skill").unwrap() < 25,
+            "Agent columns must stay beside the skill name: {header}"
+        );
         assert!(text.contains("example"));
         assert!(text.contains("✓"));
         assert!(!text.contains("Preview"));
@@ -1359,6 +1357,90 @@ mod tests {
         app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &tx);
         assert_eq!(app.focus, Focus::Query);
         assert!(!app.focus_order().contains(&Focus::Search));
+    }
+
+    #[test]
+    fn worker_refreshes_once_at_startup_then_waits_for_explicit_actions() {
+        let (_temp, app) = app();
+        let repo = app.locations.cache.join("fixture");
+        fs::create_dir_all(repo.join("example")).unwrap();
+        fs::write(repo.join("example/SKILL.md"), "# New content").unwrap();
+        let repo_url = url::Url::from_directory_path(&repo).unwrap().to_string();
+        fs::write(
+            &app.locations.config,
+            format!("repos = [{}]\n", toml::Value::String(repo_url.clone())),
+        )
+        .unwrap();
+        let installed = app.locations.shared(Scope::User).join("example");
+        fs::create_dir_all(&installed).unwrap();
+        fs::write(installed.join("SKILL.md"), "# Old content").unwrap();
+        let mut selections = Selections::default();
+        selections
+            .set(
+                Scope::User,
+                &app.locations.project,
+                vec![crate::state::Selection {
+                    repo: repo_url,
+                    name: "example".into(),
+                }],
+            )
+            .unwrap();
+        selections.save(&app.locations).unwrap();
+        let manager = Manager::open(app.locations).unwrap();
+        let (actions_tx, actions_rx) = mpsc::channel();
+        let (results_tx, results_rx) = mpsc::channel();
+        let worker = thread::spawn(move || background_worker(manager, actions_rx, results_tx));
+        assert!(
+            results_rx
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .is_none()
+        );
+        let snapshot = results_rx
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.changed, 1);
+        assert_eq!(
+            fs::read_to_string(installed.join("SKILL.md")).unwrap(),
+            "# New content"
+        );
+        assert!(matches!(
+            results_rx.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+        actions_tx.send(Action::Refresh).unwrap();
+        assert!(
+            results_rx
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            results_rx
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+                .unwrap()
+                .unwrap()
+                .changed,
+            0
+        );
+        drop(actions_tx);
+        worker.join().unwrap();
+        assert!(matches!(
+            results_rx.try_recv(),
+            Err(mpsc::TryRecvError::Disconnected)
+        ));
+    }
+
+    #[test]
+    fn manual_refresh_uses_the_combined_operation() {
+        let (_temp, mut app) = app();
+        app.busy = false;
+        let (tx, rx) = mpsc::channel();
+        app.key(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE), &tx);
+        assert!(matches!(rx.try_recv().unwrap(), Action::Refresh));
     }
 
     #[test]
